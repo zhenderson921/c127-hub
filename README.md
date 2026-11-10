@@ -50,7 +50,7 @@ hash, not the password.
 ## Map
 
 The church match map uses Mapbox when `NEXT_PUBLIC_MAPBOX_TOKEN` is set to a
-public token (it starts with `pk.`). Set it in the host's environment
+public token (it starts with `pk.`); `MAPBOX_TOKEN` is accepted as well. Set it in the host's environment
 variables, or in `.env.local` for local work. Without it, or if Mapbox cannot
 load, the page shows a drawn map with the same dots and matching. Restrict the
 token to your site's URL in the Mapbox account.
