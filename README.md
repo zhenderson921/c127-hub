@@ -18,6 +18,9 @@ mirrors the real organization.
 | Churches | Every church from first conversation to active FAM |
 | Volunteers | Clearance, training and hours across every roster |
 | Church match map | The closest serving church with room for each unconnected family |
+| Church view | What a FAM advocate sees: their families, Care Communities, requests and roster |
+| Volunteer view | What a volunteer sees on a phone: sign-ups, open requests, orientation |
+| Family request | How a family asks for help, with or without a church |
 | Experience follow-up | Who each guest's follow-up comes from, what it says, and the sequence until they take a step |
 | Care requests | Meals, rides and childcare across all churches |
 | Giving | Gifts as read from Aplos, with donor, volunteer and guest shown as one person |
@@ -44,11 +47,19 @@ The whole site sits behind one password, checked in `middleware.ts`. Set the
 the app uses the demo password in `lib/auth.ts`. The browser cookie stores a
 hash, not the password.
 
+## Map
+
+The church match map uses Mapbox when `NEXT_PUBLIC_MAPBOX_TOKEN` is set to a
+public token (it starts with `pk.`). Set it in the host's environment
+variables, or in `.env.local` for local work. Without it, or if Mapbox cannot
+load, the page shows a drawn map with the same dots and matching. Restrict the
+token to your site's URL in the Mapbox account.
+
 ## Deploy to Vercel
 
 1. Go to vercel.com/new and import this repository.
 2. Leave every build setting at its default (Vercel detects Next.js).
-3. Optional: add `SITE_PASSWORD` under Environment Variables.
+3. Under Environment Variables, add `NEXT_PUBLIC_MAPBOX_TOKEN`, and optionally `SITE_PASSWORD`.
 4. Deploy. Every later push to `main` redeploys.
 
 ## What a production version needs
@@ -56,5 +67,6 @@ hash, not the password.
 This demo has no database: it keeps state in the browser so it can be shown
 without touching real records. A real version would add a hosted database
 (for example Postgres), individual staff logins with roles, an audit trail,
-nightly reads from Aplos and MyFam, and an email sender for the follow-up
-sequences.
+a nightly read from Aplos, an email and text sender for follow-up and
+volunteer reminders, and separate sign-ins for advocates, volunteers and
+families that limit each to their own church's records.

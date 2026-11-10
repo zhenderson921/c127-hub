@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { buildSeed } from './seed';
-import type { Data, Family, Guest, Task } from './types';
+import type { Data, Family, Guest, Need, Task, Volunteer } from './types';
 import { DAY, daysSince } from './util';
 
 const KEY = 'c127-hub-data-v1';
@@ -22,6 +22,10 @@ interface Store extends Data {
   addTask: (t: Omit<Task, 'id' | 'done' | 'auto'>) => void;
   toggleTask: (taskId: string) => void;
   importFamilies: (rows: Omit<Family, 'id'>[]) => void;
+  addFamily: (row: Omit<Family, 'id'>) => void;
+  addNeed: (n: Omit<Need, 'id'>) => void;
+  startCareCommunity: (familyId: string) => void;
+  setTraining: (volunteerId: string, training: Volunteer['training']) => void;
   reset: () => void;
 }
 
@@ -120,6 +124,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       toggleTask: (taskId) => update((d) => ({ ...d, tasks: d.tasks.map((t) => (t.id === taskId ? { ...t, done: !t.done } : t)) })),
       importFamilies: (rows) =>
         update((d) => ({ ...d, families: [...rows.map((r, i) => ({ ...r, id: `fa-imp-${Date.now()}-${i}` })), ...d.families] }), `${rows.length} families imported`),
+      addFamily: (row) => update((d) => ({ ...d, families: [{ ...row, id: `fa-new-${Date.now()}` }, ...d.families] }), `${row.name} asked for help and was added`),
+      addNeed: (n) => update((d) => ({ ...d, needs: [{ ...n, id: `ne-new-${Date.now()}` }, ...d.needs] }), `New care request: ${n.title} for ${name(n.familyId)}`),
+      startCareCommunity: (familyId) =>
+        update((d) => ({ ...d, families: d.families.map((f) => (f.id === familyId ? { ...f, careCommunity: true } : f)) }), `Care Community started for ${name(familyId)}`),
+      setTraining: (volunteerId, training) =>
+        update((d) => ({ ...d, volunteers: d.volunteers.map((v) => (v.id === volunteerId ? { ...v, training } : v)) }), 'Volunteer orientation updated'),
       reset: () => setData(buildSeed()),
     };
   }, [data, update]);

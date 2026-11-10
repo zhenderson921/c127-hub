@@ -31,7 +31,7 @@ export default function CarePage() {
 
   return (
     <>
-      <PageHeader title="Care requests" sub="Meals, rides, childcare and the rest, across every church at once. Churches can keep working in MyFam; this is the view of all 70 that C127 needs.">
+      <PageHeader title="Care requests" sub="Meals, rides, childcare and the rest, across every church at once. Churches and volunteers enter these on the church side of the hub, so C127 sees all of them without an export.">
         <select aria-label="Filter by type" className="field w-auto" value={type} onChange={(e) => setType(e.target.value)}>
           <option value="All">All types</option>
           {TYPES.map((t) => <option key={t}>{t}</option>)}

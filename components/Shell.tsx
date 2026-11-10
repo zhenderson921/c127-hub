@@ -24,6 +24,14 @@ const NAV: { group: string; items: { href: string; label: string }[] }[] = [
       { href: '/giving', label: 'Giving' },
     ],
   },
+  {
+    group: 'Church side',
+    items: [
+      { href: '/church', label: 'Church view' },
+      { href: '/serve', label: 'Volunteer view' },
+      { href: '/request-help', label: 'Family request' },
+    ],
+  },
   { group: 'Data', items: [{ href: '/reports', label: 'Grant report' }, { href: '/import', label: 'Import a spreadsheet' }] },
 ];
 
