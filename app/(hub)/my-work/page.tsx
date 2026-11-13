@@ -7,7 +7,8 @@ import { ago, daysSince, fmtDate, num } from '@/lib/util';
 
 export default function MyWorkPage() {
   const { coaches, churches, families, allTasks, now, toggleTask, addTask, logChurchContact } = useStore();
-  const [coachId, setCoachId] = useState(coaches[0].id);
+  const { profile } = useStore();
+  const [coachId, setCoachId] = useState(profile?.coachId ?? coaches[0]?.id ?? '');
   const [title, setTitle] = useState('');
   const [about, setAbout] = useState('');
 
@@ -18,6 +19,15 @@ export default function MyWorkPage() {
   const overdue = open.filter((t) => t.due < now);
   const myFamilies = families.filter((f) => f.churchId && ids.has(f.churchId));
   const quietFamilies = myFamilies.filter((f) => daysSince(f.lastContact, now) >= 30);
+
+  if (coaches.length === 0) {
+    return (
+      <>
+        <PageHeader title="My work" sub="Each coach's churches, to-dos and reminders." />
+        <Panel><p className="px-4 py-8 text-sm text-ink-soft">No coaches yet. Import your church list with a coach column and each coach appears here with their churches.</p></Panel>
+      </>
+    );
+  }
 
   return (
     <>

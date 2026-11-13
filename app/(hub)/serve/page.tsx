@@ -12,11 +12,19 @@ export default function VolunteerViewPage() {
   // Start on a volunteer who has something on their plate, so the screen is not empty.
   const first = useMemo(() => {
     const busy = needs.find((n) => n.status === 'Claimed' && n.date >= now && n.volunteerId);
-    return busy?.volunteerId ?? volunteers[0].id;
+    return busy?.volunteerId ?? volunteers[0]?.id ?? '';
   }, [needs, volunteers, now]);
   const [meId, setMeId] = useState(first);
   const me = volunteers.find((v) => v.id === meId) ?? volunteers[0];
-  const church = churches.find((c) => c.id === me.churchId)!;
+  if (!me) {
+    return (
+      <>
+        <PageHeader title="Volunteer view" sub="What a volunteer sees on their phone or computer." />
+        <div className="rounded-lg border border-line bg-white px-4 py-8 text-sm text-ink-soft">No volunteers yet. Once a church has a roster, pick a volunteer here to see the hub the way they do.</div>
+      </>
+    );
+  }
+  const church = churches.find((c) => c.id === me.churchId) ?? { name: '' };
   const peers = volunteers.filter((v) => v.churchId === me.churchId);
   const famName = Object.fromEntries(families.map((f) => [f.id, f.name]));
 

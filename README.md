@@ -27,8 +27,8 @@ mirrors the real organization.
 | Grant report | Monthly numbers by county, exported as CSV |
 | Import a spreadsheet | Reads a CSV's headings, tidies values, flags duplicates |
 
-Changes you make (connecting a family, sending a follow-up, importing rows) are
-saved in your own browser only. "Reset sample data" in the sidebar restores the
+In demo mode, changes you make (connecting a family, sending a follow-up,
+importing rows) are saved in your own browser only. "Reset sample data" in the sidebar restores the
 starting state.
 
 ## Run it
@@ -47,6 +47,19 @@ The whole site sits behind one password, checked in `middleware.ts`. Set the
 the app uses the demo password in `lib/auth.ts`. The browser cookie stores a
 hash, not the password.
 
+## Two ways in
+
+- **Personal sign-in.** Email and password, checked by Supabase. This opens the
+  live records in the C127 Supabase project, and the person's role decides what
+  they see: staff and coaches see everything, a church advocate sees only their
+  own church. Someone with no role sees nothing.
+- **Demo password.** Opens invented sample data kept in that browser. Nothing in
+  demo mode reads or writes the database.
+
+The schema and access rules live in `supabase/migrations`. To give a new person
+access: add them under Authentication in the Supabase dashboard, then add a row
+for them in the `profiles` table with their role.
+
 ## Map
 
 The church match map uses Mapbox when `NEXT_PUBLIC_MAPBOX_TOKEN` is set to a
@@ -62,11 +75,9 @@ token to your site's URL in the Mapbox account.
 3. Under Environment Variables, add `NEXT_PUBLIC_MAPBOX_TOKEN`, and optionally `SITE_PASSWORD`.
 4. Deploy. Every later push to `main` redeploys.
 
-## What a production version needs
+## Still to build
 
-This demo has no database: it keeps state in the browser so it can be shown
-without touching real records. A real version would add a hosted database
-(for example Postgres), individual staff logins with roles, an audit trail,
-a nightly read from Aplos, an email and text sender for follow-up and
-volunteer reminders, and separate sign-ins for advocates, volunteers and
-families that limit each to their own church's records.
+Email and text sending for follow-up and volunteer reminders, a nightly read
+from Aplos, sign-ins for volunteers and families, and screens for adding or
+editing a single church, coach or volunteer by hand (today they arrive by
+import).

@@ -13,11 +13,27 @@ const TYPES: NeedType[] = ['Meal', 'Childcare', 'Transportation', 'Tangible item
 export default function ChurchViewPage() {
   const { churches, families, volunteers, needs, coaches, now, claimNeed, addNeed, startCareCommunity, setTraining, connectFamily } = useStore();
   const serving = useMemo(() => churches.filter(isServing).sort((a, b) => a.name.localeCompare(b.name)), [churches]);
+  const { profile, mode } = useStore();
+  const locked = mode === 'live' && profile?.role === 'advocate';
   const [churchId, setChurchId] = useState(() => {
+    if (locked && profile?.churchId) return profile.churchId;
     const load = (id: string) => families.filter((f) => f.churchId === id).length;
-    return (serving.find((c) => c.stage === 'Active FAM' && load(c.id) >= 6 && load(c.id) < c.capacity) ?? serving[0]).id;
+    return (serving.find((c) => c.stage === 'Active FAM' && load(c.id) >= 6 && load(c.id) < c.capacity) ?? serving[0] ?? churches[0])?.id ?? '';
   });
-  const church = churches.find((c) => c.id === churchId)!;
+  const church = churches.find((c) => c.id === churchId);
+  const [famId, setFamId] = useState('');
+  const [type, setType] = useState<NeedType>('Meal');
+  const [title, setTitle] = useState('');
+  const [date, setDate] = useState('');
+  if (!church) {
+    return (
+      <>
+        <PageHeader title="Church view" sub="What a FAM advocate sees when they sign in." />
+        <Panel><p className="px-4 py-8 text-sm text-ink-soft">No churches are serving families yet. Import your church list, and any church marked Launching or Active FAM appears here.</p></Panel>
+      </>
+    );
+  }
+
 
   const myFamilies = families.filter((f) => f.churchId === churchId);
   const roster = volunteers.filter((v) => v.churchId === churchId);
@@ -29,17 +45,12 @@ export default function ChurchViewPage() {
   const waiting = familiesNear(church, families, 5).slice(0, 5);
   const coach = coaches.find((c) => c.id === church.coachId);
 
-  const [famId, setFamId] = useState('');
-  const [type, setType] = useState<NeedType>('Meal');
-  const [title, setTitle] = useState('');
-  const [date, setDate] = useState('');
-
   return (
     <>
       <PageHeader title="Church view" sub="What a FAM advocate sees when they sign in: their own families, Care Communities, requests and volunteers. This is the part of the hub that takes the place of MyFam.">
         <label htmlFor="cv-church" className="text-sm text-ink-soft">Signed in as the advocate at</label>
-        <select id="cv-church" className="field w-auto max-w-[18rem]" value={churchId} onChange={(e) => { setChurchId(e.target.value); setFamId(''); }}>
-          {serving.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        <select id="cv-church" disabled={locked} className="field w-auto max-w-[18rem]" value={churchId} onChange={(e) => { setChurchId(e.target.value); setFamId(''); }}>
+          {(locked ? [church] : serving).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </PageHeader>
 
