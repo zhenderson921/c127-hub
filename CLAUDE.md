@@ -107,7 +107,12 @@ Next.js 15 (App Router), React 19, TypeScript, Tailwind 3, Supabase
   churches, volunteers, map, experience, care, giving, reports, import, church,
   serve, request-help
 - `app/live/*` – the Live tool's screens: people, families, churches, review
-  (Data check)
+  (Data check), account (change password). Each of people, families and
+  churches is a list plus a full page per record (`[id]/page.tsx`). Every
+  person, family and church named on any page is a link to its page
+  (`components/live/links.tsx`), and `components/live/NavArrows.tsx` gives
+  in-app back and forward arrows over the trail of pages visited. Lists keep
+  their search and filters across navigation (`lib/live/sticky.ts`).
 - `components/ShellFrame.tsx` – the frame both views share, with the view
   switch; `Shell.tsx` is the Prototype's nav, `LiveShell.tsx` the Live tool's
 - `components/live/ContactLog.tsx` – the contact log used on live screens

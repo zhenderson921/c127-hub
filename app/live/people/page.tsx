@@ -1,10 +1,11 @@
 'use client';
 
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ContactLog } from '@/components/live/ContactLog';
-import { Badge, Drawer, PageHeader, Pager, Panel } from '@/components/ui';
+import { ChurchLink, PersonLink } from '@/components/live/links';
+import { Badge, PageHeader, Pager, Panel } from '@/components/ui';
 import { churchLabel } from '@/lib/live/match';
+import { useSticky } from '@/lib/live/sticky';
 import { useLive } from '@/lib/live/store';
 import { personName, type Person } from '@/lib/live/types';
 import { downloadCsv, num } from '@/lib/util';
@@ -105,15 +106,12 @@ function FilterMenu({ label, options, selected, onChange, search }: { label: str
 
 export default function LivePeoplePage() {
   const { people, churches, families, members, roles } = useLive();
-  const [q, setQ] = useState('');
-  const [filters, setFilters] = useState<Record<FilterKey, string[]>>({ tags: [], churches: [], homeTypes: [], counties: [], cities: [], contact: [] });
-  const [sort, setSort] = useState<{ by: 'name' | 'church' | 'city'; dir: 1 | -1 }>({ by: 'name', dir: 1 });
-  const [page, setPage] = useState(0);
-  const [openId, setOpenId] = useState<string | null>(null);
-  useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get('open');
-    if (id) setOpenId(id);
-  }, []);
+  const router = useRouter();
+  // Search, filters, sorting and page are kept while you click into a person and come back.
+  const [q, setQ] = useSticky('people.q', '');
+  const [filters, setFilters] = useSticky<Record<FilterKey, string[]>>('people.filters', { tags: [], churches: [], homeTypes: [], counties: [], cities: [], contact: [] });
+  const [sort, setSort] = useSticky<{ by: 'name' | 'church' | 'city'; dir: 1 | -1 }>('people.sort', { by: 'name', dir: 1 });
+  const [page, setPage] = useSticky('people.page', 0);
 
   const churchName = useMemo(() => new Map(churches.map((c) => [c.id, churchLabel(c)])), [churches]);
 
@@ -205,7 +203,6 @@ export default function LivePeoplePage() {
       </button>
     </th>
   );
-  const open = rows.find((r) => r.p.id === openId);
 
   return (
     <>
@@ -254,10 +251,10 @@ export default function LivePeoplePage() {
             </thead>
             <tbody>
               {visible.map((r) => (
-                <tr key={r.p.id} onClick={() => setOpenId(r.p.id)} className="cursor-pointer border-b border-line last:border-0 hover:bg-brand-light/50">
-                  <td className="td font-semibold text-brand-deep">{personName(r.p)}</td>
+                <tr key={r.p.id} onClick={() => router.push(`/live/people/${r.p.id}`)} className="cursor-pointer border-b border-line last:border-0 hover:bg-brand-light/50">
+                  <td className="td"><PersonLink id={r.p.id}>{personName(r.p) || 'Unnamed'}</PersonLink></td>
                   <td className="td"><div className="flex flex-wrap gap-1">{r.tags.map((t) => <Badge key={t} tone={tagTone(t)}>{t}</Badge>)}</div></td>
-                  <td className="td">{r.churchText || (r.p.homeChurchText ? <span className="text-warn" title="As typed in the spreadsheet. Confirm which church it is on the Data check page.">&ldquo;{r.p.homeChurchText}&rdquo; to confirm</span> : <span className="text-ink-faint">–</span>)}</td>
+                  <td className="td">{r.churchIds.length ? r.churchIds.map((id, i) => <span key={id}>{i > 0 && ', '}<ChurchLink id={id}>{churchName.get(id) ?? 'Church'}</ChurchLink></span>) : (r.p.homeChurchText ? <span className="text-warn" title="As typed in the spreadsheet. Confirm which church it is on the Data check page.">&ldquo;{r.p.homeChurchText}&rdquo; to confirm</span> : <span className="text-ink-faint">–</span>)}</td>
                   <td className="td">{r.p.email || <span className="text-ink-faint">–</span>}</td>
                   <td className="td num whitespace-nowrap">{r.p.phone || <span className="text-ink-faint">–</span>}</td>
                   <td className="td">{r.p.city}</td>
@@ -270,9 +267,6 @@ export default function LivePeoplePage() {
         <Pager page={page} pages={pages} onPage={setPage} />
       </Panel>
 
-      <Drawer open={!!open} onClose={() => setOpenId(null)} title={open ? personName(open.p) : ''}>
-        {open && <PersonDetail key={open.p.id} row={open} />}
-      </Drawer>
     </>
   );
 }
@@ -282,89 +276,4 @@ function hasContact(p: Person, c: string): boolean {
   if (c === 'No email') return !p.email;
   if (c === 'Has a phone') return !!p.phone;
   return !p.phone;
-}
-
-function PersonDetail({ row }: { row: Row }) {
-  const { churches, families, members, roles, interactions, updatePerson } = useLive();
-  const p = row.p;
-  const [form, setForm] = useState({ firstName: p.firstName, lastName: p.lastName, email: p.email, phone: p.phone, street: p.street, city: p.city, state: p.state, zip: p.zip, county: p.county, notes: p.notes });
-  const churchName = new Map(churches.map((c) => [c.id, churchLabel(c)]));
-  const myFamilies = members.filter((m) => m.personId === p.id).map((m) => ({ m, f: families.find((f) => f.id === m.familyId) }));
-  const myRoles = roles.filter((r) => r.personId === p.id);
-  const log = interactions.filter((i) => i.personId === p.id);
-  // Each field saves when you click away from it, and only if it changed.
-  const field = (k: keyof typeof form, label: string, extra: { type?: string; span?: string } = {}) => (
-    <div className={extra.span ?? ''}>
-      <label htmlFor={`pd-${k}`} className="label">{label}</label>
-      <input
-        id={`pd-${k}`}
-        type={extra.type ?? 'text'}
-        className="field"
-        value={form[k]}
-        onChange={(e) => setForm({ ...form, [k]: e.target.value })}
-        onBlur={() => {
-          if (form[k] === p[k]) return;
-          if (k === 'firstName' && !form.firstName.trim()) return setForm({ ...form, firstName: p.firstName });
-          updatePerson(p.id, { [k]: form[k] });
-        }}
-      />
-    </div>
-  );
-
-  return (
-    <>
-      <div className="mb-3 flex flex-wrap gap-1.5">{row.tags.map((t) => <Badge key={t} tone={tagTone(t)}>{t}</Badge>)}</div>
-
-      {(myFamilies.length > 0 || myRoles.length > 0) && (
-        <ul className="mb-4 divide-y divide-line rounded-md border border-line">
-          {myFamilies.map(({ m, f }) => (
-            <li key={m.familyId} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-              <span>{m.relationship} in the <span className="font-semibold">{f?.name ?? 'family'}</span>{m.isPrimary && <span className="text-ink-soft"> · main contact</span>}</span>
-              <Link className="shrink-0 text-xs font-semibold text-brand-dark underline" href={`/live/families?open=${m.familyId}`}>Open family</Link>
-            </li>
-          ))}
-          {myRoles.map((r) => (
-            <li key={r.id} className="px-3 py-2 text-sm">
-              {r.role}{r.title ? `, ${r.title}` : ''}
-              {r.churchId ? <> at <span className="font-semibold">{churchName.get(r.churchId) ?? 'a church'}</span></> : p.homeChurchText ? <> at &ldquo;{p.homeChurchText}&rdquo; <span className="text-warn">(to confirm)</span></> : null}
-              {r.status !== 'Active' && <span className="text-ink-soft"> · {r.status}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="grid grid-cols-6 gap-2">
-        {field('firstName', 'First name', { span: 'col-span-3' })}
-        {field('lastName', 'Last name', { span: 'col-span-3' })}
-        {field('phone', 'Phone', { type: 'tel', span: 'col-span-3' })}
-        {field('email', 'Email', { type: 'email', span: 'col-span-3' })}
-        {field('street', 'Street', { span: 'col-span-6' })}
-        {field('city', 'City', { span: 'col-span-3' })}
-        {field('state', 'State', { span: 'col-span-1' })}
-        {field('zip', 'Zip', { span: 'col-span-2' })}
-        {field('county', 'County', { span: 'col-span-6' })}
-        <div className="col-span-6">
-          <label htmlFor="pd-church" className="label">Home church (where they attend)</label>
-          <select id="pd-church" className="field" value={p.homeChurchId ?? ''} onChange={(e) => updatePerson(p.id, { homeChurchId: e.target.value || null })}>
-            <option value="">{p.homeChurchText ? `Not in the list: ${p.homeChurchText}` : 'None, or not in the list'}</option>
-            {churches.map((c) => <option key={c.id} value={c.id}>{churchLabel(c)}</option>)}
-          </select>
-        </div>
-      </div>
-      <p className="mt-1 text-xs text-ink-soft">Each field saves when you click away from it.</p>
-      {(p.phone || p.email) && (
-        <div className="mt-3 flex gap-2">
-          {p.phone && <a className="btn-ghost flex-1 text-center" href={`tel:${p.phone}`}>Call</a>}
-          {p.email && <a className="btn-ghost flex-1 text-center" href={`mailto:${p.email}`}>Email</a>}
-        </div>
-      )}
-
-      <ContactLog about={{ personId: p.id }} entries={log} />
-
-      <div className="mt-6">
-        <label htmlFor="pd-notes" className="label">Notes</label>
-        <textarea id="pd-notes" className="field" rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} onBlur={() => form.notes !== p.notes && updatePerson(p.id, { notes: form.notes })} />
-      </div>
-    </>
-  );
 }

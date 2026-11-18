@@ -1,57 +1,30 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { ContactLog, lastContact } from '@/components/live/ContactLog';
-import { Badge, Drawer, PageHeader, Pager, Panel, Row } from '@/components/ui';
+import { useRouter } from 'next/navigation';
+import { useMemo, useState } from 'react';
+import { lastContact } from '@/components/live/ContactLog';
+import { ChurchSelect, HomeTypePicker } from '@/components/live/fields';
+import { ChurchLink, FamilyLink } from '@/components/live/links';
+import { Badge, Drawer, PageHeader, Pager, Panel } from '@/components/ui';
+import { useSticky } from '@/lib/live/sticky';
 import { useLive, type NewAdult } from '@/lib/live/store';
-import {
-  CARE_STATUSES, CC_STATUSES, CHILD_RELATIONSHIPS, FAMILY_STATUSES, HOME_TYPES, MARITAL_STATUSES, MEMBER_RELATIONSHIPS, SERVING_STATUSES,
-  ageBand, careLabel, personName,
-  type CareStatus, type CcStatus, type ChildRelationship, type Church, type Family, type FamilyStatus, type HomeType, type MaritalStatus, type MemberRelationship,
-} from '@/lib/live/types';
+import { CARE_STATUSES, HOME_TYPES, MARITAL_STATUSES, MEMBER_RELATIONSHIPS, SERVING_STATUSES, careLabel, personName, type CareStatus, type HomeType, type MaritalStatus, type MemberRelationship } from '@/lib/live/types';
 import { ago, daysSince, downloadCsv, fmtDateLong, num } from '@/lib/util';
 
 const PER = 25;
 const careTone = (label: string) => (label === 'Active Care Community' ? 'good' : label === 'Priority Care' ? 'alert' : label === 'Care Requested' || label === 'Building team' ? 'warn' : 'gray');
-const day = (d: string) => (d ? fmtDateLong(new Date(`${d}T12:00:00`).getTime()) : '');
-
-function ChurchSelect({ id, value, onChange, churches, empty }: { id: string; value: string | null; onChange: (v: string | null) => void; churches: Church[]; empty: string }) {
-  return (
-    <select id={id} className="field" value={value ?? ''} onChange={(e) => onChange(e.target.value || null)}>
-      <option value="">{empty}</option>
-      {churches.map((c) => <option key={c.id} value={c.id}>{c.name}{c.campus ? ` (${c.campus})` : ''}</option>)}
-    </select>
-  );
-}
-
-function HomeTypePicker({ value, onChange }: { value: HomeType[]; onChange: (v: HomeType[]) => void }) {
-  return (
-    <div className="flex flex-wrap gap-x-4 gap-y-1">
-      {HOME_TYPES.map((t) => (
-        <label key={t} className="flex items-center gap-1.5 text-sm">
-          <input type="checkbox" checked={value.includes(t)} onChange={(e) => onChange(e.target.checked ? [...value, t] : value.filter((x) => x !== t))} />
-          {t}
-        </label>
-      ))}
-    </div>
-  );
-}
 
 export default function LiveFamiliesPage() {
   const { families, churches, people, members, children, careCommunities, interactions } = useLive();
-  const [q, setQ] = useState('');
-  const [care, setCare] = useState('All');
-  const [type, setType] = useState('All');
-  const [county, setCounty] = useState('All');
-  const [conn, setConn] = useState('All');
-  const [page, setPage] = useState(0);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const router = useRouter();
+  // Search, filters and page are kept while you click into a family and come back.
+  const [q, setQ] = useSticky('families.q', '');
+  const [care, setCare] = useSticky('families.care', 'All');
+  const [type, setType] = useSticky('families.type', 'All');
+  const [county, setCounty] = useSticky('families.county', 'All');
+  const [conn, setConn] = useSticky('families.conn', 'All');
+  const [page, setPage] = useSticky('families.page', 0);
   const [adding, setAdding] = useState(false);
-  // A link from the Data check page opens a family directly: /live/families?open=<id>
-  useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get('open');
-    if (id) setOpenId(id);
-  }, []);
 
   const churchById = useMemo(() => Object.fromEntries(churches.map((c) => [c.id, c])), [churches]);
   const personById = useMemo(() => Object.fromEntries(people.map((p) => [p.id, p])), [people]);
@@ -105,7 +78,6 @@ export default function LiveFamiliesPage() {
 
   const pages = Math.ceil(rows.length / PER);
   const shown = rows.slice(page * PER, page * PER + PER);
-  const open = families.find((f) => f.id === openId);
   const set = (fn: () => void) => {
     fn();
     setPage(0);
@@ -182,17 +154,17 @@ export default function LiveFamiliesPage() {
                 const lc = lastContact(contactBy[f.id] ?? []);
                 const stale = lc.reached === null || daysSince(lc.reached) >= 30;
                 return (
-                  <tr key={f.id} onClick={() => setOpenId(f.id)} className="cursor-pointer border-b border-line last:border-0 hover:bg-brand-light/50">
+                  <tr key={f.id} onClick={() => router.push(`/live/families/${f.id}`)} className="cursor-pointer border-b border-line last:border-0 hover:bg-brand-light/50">
                     <td className="td">
-                      <div className="font-semibold text-brand-deep">{f.name}{f.familyStatus !== 'Active' && <span className="ml-2"><Badge>{f.familyStatus}</Badge></span>}</div>
+                      <div><FamilyLink id={f.id}>{f.name}</FamilyLink>{f.familyStatus !== 'Active' && <span className="ml-2"><Badge>{f.familyStatus}</Badge></span>}</div>
                       {firstNames[f.id] && <div className="text-xs text-ink-soft">{firstNames[f.id].join(' & ')}</div>}
                     </td>
                     <td className="td">{f.homeTypes.join(' / ') || <span className="text-ink-faint">Not set</span>}</td>
                     <td className="td">{f.city}</td>
                     <td className="td num text-right">{kidCount[f.id] || '–'}</td>
                     <td className="td"><Badge tone={careTone(labels[f.id])}>{labels[f.id]}</Badge></td>
-                    <td className="td">{f.homeChurchId ? churchById[f.homeChurchId]?.name : f.homeChurchText ? <span className="text-ink-soft" title="As typed in the spreadsheet. Confirm which church it is on the Data check page.">&ldquo;{f.homeChurchText}&rdquo;</span> : <span className="text-ink-faint">–</span>}</td>
-                    <td className="td">{f.servingChurchId ? churchById[f.servingChurchId]?.name : f.servingChurchText ? <span className="text-warn" title="As typed in the spreadsheet. Confirm which church it is on the Data check page.">&ldquo;{f.servingChurchText}&rdquo; to confirm</span> : <span className="text-ink-faint">None yet</span>}</td>
+                    <td className="td">{f.homeChurchId && churchById[f.homeChurchId] ? <ChurchLink id={f.homeChurchId}>{churchById[f.homeChurchId].name}</ChurchLink> : f.homeChurchText ? <span className="text-ink-soft" title="As typed in the spreadsheet. Confirm which church it is on the Data check page.">&ldquo;{f.homeChurchText}&rdquo;</span> : <span className="text-ink-faint">–</span>}</td>
+                    <td className="td">{f.servingChurchId && churchById[f.servingChurchId] ? <ChurchLink id={f.servingChurchId}>{churchById[f.servingChurchId].name}</ChurchLink> : f.servingChurchText ? <span className="text-warn" title="As typed in the spreadsheet. Confirm which church it is on the Data check page.">&ldquo;{f.servingChurchText}&rdquo; to confirm</span> : <span className="text-ink-faint">None yet</span>}</td>
                     <td className={`td ${stale ? 'font-semibold text-warn' : 'text-ink-soft'}`}>{lc.reached ? ago(lc.reached) : 'Never'}</td>
                   </tr>
                 );
@@ -209,12 +181,9 @@ export default function LiveFamiliesPage() {
       </Panel>
 
       <Drawer open={adding} onClose={() => setAdding(false)} title="Add a family">
-        {adding && <AddFamily onDone={(id) => { setAdding(false); if (id) setOpenId(id); }} />}
+        {adding && <AddFamily onDone={(id) => { setAdding(false); if (id) router.push(`/live/families/${id}`); }} />}
       </Drawer>
 
-      <Drawer open={!!open} onClose={() => setOpenId(null)} title={open?.name ?? ''}>
-        {open && <FamilyDetail key={open.id} family={open} />}
-      </Drawer>
     </>
   );
 }
@@ -318,163 +287,5 @@ function AddFamily({ onDone }: { onDone: (id: string | null) => void }) {
 
       <button type="submit" disabled={busy || !finalName} className="btn-primary w-full">{busy ? 'Saving…' : 'Add this family'}</button>
     </form>
-  );
-}
-
-function FamilyDetail({ family }: { family: Family }) {
-  const { churches, people, members, children, careCommunities, interactions, updateFamily, addChild, removeChild, startCareCommunity, updateCareCommunity } = useLive();
-  const churchById = useMemo(() => Object.fromEntries(churches.map((c) => [c.id, c])), [churches]);
-  const adults = members
-    .filter((m) => m.familyId === family.id)
-    .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
-    .map((m) => ({ m, p: people.find((p) => p.id === m.personId) }));
-  const kids = children.filter((c) => c.familyId === family.id);
-  const ccs = careCommunities.filter((c) => c.familyId === family.id);
-  const openCc = ccs.some((c) => c.status !== 'Closed');
-  const log = interactions.filter((i) => i.familyId === family.id);
-  const lc = lastContact(log);
-  const serving = churches.filter((c) => SERVING_STATUSES.includes(c.status) || c.id === family.servingChurchId);
-
-  const [kid, setKid] = useState<{ firstName: string; birthYear: string; relationship: ChildRelationship }>({ firstName: '', birthYear: '', relationship: 'Foster' });
-  const [prayer, setPrayer] = useState(family.prayerRequest);
-  const [notes, setNotes] = useState(family.notes);
-  const label = careLabel(family, careCommunities);
-  const address = [family.street, family.unit].filter(Boolean).join(', ');
-  const cityLine = [family.city, [family.state, family.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
-
-  async function submitKid(e: React.FormEvent) {
-    e.preventDefault();
-    const year = kid.birthYear ? Number(kid.birthYear) : null;
-    if (await addChild({ familyId: family.id, firstName: kid.firstName, birthYear: year, relationship: kid.relationship })) setKid({ firstName: '', birthYear: '', relationship: kid.relationship });
-  }
-
-  return (
-    <>
-      <div className="mb-3 flex flex-wrap gap-2">
-        {family.homeTypes.map((t) => <Badge key={t} tone="brand">{t}</Badge>)}
-        <Badge tone={family.familyStatus === 'Active' ? 'good' : 'gray'}>{family.familyStatus}</Badge>
-        <Badge tone={careTone(label)}>{label}</Badge>
-      </div>
-
-      <h3 className="text-sm font-bold">Adults in the home</h3>
-      {adults.length === 0 ? (
-        <p className="mt-1 text-sm text-ink-soft">No adults recorded.</p>
-      ) : (
-        <ul className="mt-1 divide-y divide-line">
-          {adults.map(({ m, p }) => (
-            <li key={m.personId} className="py-2 text-sm">
-              <div className="font-semibold">{personName(p)} <span className="font-normal text-ink-soft">· {m.relationship}{m.isPrimary ? ' · main contact' : ''}</span></div>
-              <div className="text-ink-soft">
-                {p?.phone && <a className="underline" href={`tel:${p.phone}`}>{p.phone}</a>}
-                {p?.phone && p?.email && ' · '}
-                {p?.email && <a className="underline" href={`mailto:${p.email}`}>{p.email}</a>}
-                {!p?.phone && !p?.email && 'No phone or email yet'}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="mt-4">
-        <Row label="Address">{address || cityLine ? <>{address}{address && cityLine && <br />}{cityLine}</> : 'Not recorded'}</Row>
-        {family.county && <Row label="County">{family.county}</Row>}
-        {family.maritalStatus && <Row label="Marital status">{family.maritalStatus}</Row>}
-        <Row label="Last connected">{lc.reached ? ago(lc.reached) : 'Never'}</Row>
-        {lc.attempt !== null && lc.attempt !== lc.reached && <Row label="Last attempt">{ago(lc.attempt)}</Row>}
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <div>
-          <label htmlFor="fd-status" className="label">Family status</label>
-          <select id="fd-status" className="field" value={family.familyStatus} onChange={(e) => updateFamily(family.id, { familyStatus: e.target.value as FamilyStatus })}>
-            {FAMILY_STATUSES.map((s) => <option key={s}>{s}</option>)}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="fd-care" className="label">Care</label>
-          <select id="fd-care" className="field" value={family.careStatus} onChange={(e) => updateFamily(family.id, { careStatus: e.target.value as CareStatus })}>
-            {CARE_STATUSES.map((s) => <option key={s}>{s}</option>)}
-          </select>
-        </div>
-        <div className="col-span-2">
-          <span className="label">Home type</span>
-          <HomeTypePicker value={family.homeTypes} onChange={(homeTypes) => updateFamily(family.id, { homeTypes })} />
-        </div>
-        <div className="col-span-2">
-          <label htmlFor="fd-home" className="label">Home church (where they attend)</label>
-          <ChurchSelect id="fd-home" value={family.homeChurchId} onChange={(homeChurchId) => updateFamily(family.id, { homeChurchId })} churches={churches} empty={family.homeChurchText ? `Not in the list: ${family.homeChurchText}` : 'None, or not in the list'} />
-        </div>
-        <div className="col-span-2">
-          <label htmlFor="fd-serv" className="label">Serving church (whose FAM serves them)</label>
-          <ChurchSelect id="fd-serv" value={family.servingChurchId} onChange={(servingChurchId) => updateFamily(family.id, { servingChurchId })} churches={serving} empty={family.servingChurchText ? `To confirm: ${family.servingChurchText}` : 'None yet'} />
-        </div>
-        <div className="col-span-2">
-          <label htmlFor="fd-next" className="label">Next contact</label>
-          <input id="fd-next" type="date" className="field" value={family.nextContactOn} onChange={(e) => updateFamily(family.id, { nextContactOn: e.target.value })} />
-        </div>
-      </div>
-
-      <div className="mt-6">
-        <h3 className="text-sm font-bold">Children</h3>
-        <p className="mt-0.5 text-xs text-ink-soft">First name and year of birth only. Ages are worked out, so they stay right as the children grow.</p>
-        {kids.length > 0 && (
-          <ul className="mt-2 divide-y divide-line">
-            {kids.map((c) => {
-              const { age, band } = ageBand(c.birthYear);
-              return (
-                <li key={c.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                  <span><span className="font-semibold">{c.firstName || 'Name not recorded'}</span> <span className="text-ink-soft">· {c.relationship} · {age === null ? c.notes || 'age unknown' : `about ${age}, ${band}`}</span></span>
-                  <button className="text-xs text-ink-soft underline hover:text-alert" onClick={() => { if (window.confirm(`Remove ${c.firstName || 'this child'} from the family?`)) removeChild(c.id); }}>Remove</button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        <form onSubmit={submitKid} className="mt-2 grid grid-cols-6 items-end gap-2">
-          <div className="col-span-2"><label htmlFor="kid-n" className="label">First name</label><input id="kid-n" className="field" value={kid.firstName} onChange={(e) => setKid({ ...kid, firstName: e.target.value })} /></div>
-          <div className="col-span-2"><label htmlFor="kid-y" className="label">Born (year)</label><input id="kid-y" className="field" type="number" min={1980} max={new Date().getFullYear()} placeholder="2019" value={kid.birthYear} onChange={(e) => setKid({ ...kid, birthYear: e.target.value })} /></div>
-          <div className="col-span-2">
-            <label htmlFor="kid-r" className="label">Type</label>
-            <select id="kid-r" className="field" value={kid.relationship} onChange={(e) => setKid({ ...kid, relationship: e.target.value as ChildRelationship })}>
-              {CHILD_RELATIONSHIPS.map((r) => <option key={r}>{r}</option>)}
-            </select>
-          </div>
-          <button type="submit" disabled={!kid.firstName.trim() && !kid.birthYear} className="btn-ghost col-span-6">Add a child</button>
-        </form>
-      </div>
-
-      <div className="mt-6">
-        <h3 className="text-sm font-bold">Care Community</h3>
-        {ccs.length === 0 && <p className="mt-1 text-sm text-ink-soft">This family has not had a Care Community.</p>}
-        <ul className="mt-2 space-y-2">
-          {ccs.map((c) => (
-            <li key={c.id} className="rounded-md border border-line p-3 text-sm">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold">{c.churchId ? churchById[c.churchId]?.name ?? 'Church' : 'No church set'}</span>
-                <select aria-label="Care Community status" className="field w-auto py-1" value={c.status} onChange={(e) => updateCareCommunity(c.id, { status: e.target.value as CcStatus })}>
-                  {CC_STATUSES.map((s) => <option key={s}>{s}</option>)}
-                </select>
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <div><label htmlFor={`cc-l-${c.id}`} className="label">Launched</label><input id={`cc-l-${c.id}`} type="date" className="field" value={c.launchedOn} onChange={(e) => updateCareCommunity(c.id, { launchedOn: e.target.value })} /></div>
-                <div><label htmlFor={`cc-c-${c.id}`} className="label">Closed</label><input id={`cc-c-${c.id}`} type="date" className="field" value={c.closedOn} onChange={(e) => updateCareCommunity(c.id, { closedOn: e.target.value })} /></div>
-              </div>
-              {c.status === 'Closed' && c.launchedOn && c.closedOn && <p className="mt-1 text-xs text-ink-soft">Served {day(c.launchedOn)} to {day(c.closedOn)}</p>}
-            </li>
-          ))}
-        </ul>
-        {!openCc && <button className="btn-ghost mt-2 w-full" onClick={() => startCareCommunity(family.id)}>Start building a Care Community</button>}
-      </div>
-
-      <ContactLog about={{ familyId: family.id }} entries={log} />
-
-      <div className="mt-6">
-        <label htmlFor="fd-prayer" className="label">Prayer request</label>
-        <textarea id="fd-prayer" className="field" rows={2} value={prayer} onChange={(e) => setPrayer(e.target.value)} onBlur={() => prayer !== family.prayerRequest && updateFamily(family.id, { prayerRequest: prayer })} />
-        <label htmlFor="fd-notes" className="label mt-3">Notes</label>
-        <textarea id="fd-notes" className="field" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} onBlur={() => notes !== family.notes && updateFamily(family.id, { notes })} />
-        <p className="mt-1 text-xs text-ink-soft">Prayer requests and notes save when you click away.</p>
-      </div>
-    </>
   );
 }

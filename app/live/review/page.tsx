@@ -169,14 +169,14 @@ export default function DataCheckPage() {
         <Pairs
           empty="No two families look alike."
           intro="These families share an address or a main contact email. If they are two records of one family, tell Zane which to keep: joining two families is not built yet."
-          items={familyPairs.map((p) => ({ key: pairKey(p.families.map((f) => f.id)), kind: 'families' as const, why: p.why, likely: p.likely, rows: p.families.map((f) => ({ id: f.id, title: f.name, detail: [f.street, f.city].filter(Boolean).join(', '), href: `/live/families?open=${f.id}` })) }))}
+          items={familyPairs.map((p) => ({ key: pairKey(p.families.map((f) => f.id)), kind: 'families' as const, why: p.why, likely: p.likely, rows: p.families.map((f) => ({ id: f.id, title: f.name, detail: [f.street, f.city].filter(Boolean).join(', '), href: `/live/families/${f.id}` })) }))}
         />
       )}
       {tab === 'Same church?' && total > 0 && (
         <Pairs
           empty="No two churches look alike."
           intro="These churches share a name or a street address. Two campuses of one church are fine: say they are different and they will stop showing here."
-          items={churchPairs.map((p) => ({ key: pairKey(p.churches.map((c) => c.id)), kind: 'churches' as const, why: p.why, likely: p.likely, rows: p.churches.map((c) => ({ id: c.id, title: churchLabel(c), detail: [c.street, c.city].filter(Boolean).join(', '), href: '/live/churches' })) }))}
+          items={churchPairs.map((p) => ({ key: pairKey(p.churches.map((c) => c.id)), kind: 'churches' as const, why: p.why, likely: p.likely, rows: p.churches.map((c) => ({ id: c.id, title: churchLabel(c), detail: [c.street, c.city].filter(Boolean).join(', '), href: `/live/churches/${c.id}` })) }))}
         />
       )}
       {tab === 'Missing details' && total > 0 && <Missing groups={missing} />}
@@ -294,7 +294,7 @@ function SamePeople({ groups }: { groups: { people: Person[]; likely: boolean }[
                 <ul className="mt-2 space-y-1.5">
                   {sorted.map((p) => (
                     <li key={p.id} className="rounded-md border border-line bg-paper px-3 py-2 text-sm">
-                      <div>{about(p)}</div>
+                      <div>{about(p)} · <Link className="text-xs font-semibold text-brand-dark underline" href={`/live/people/${p.id}`}>Open</Link></div>
                       <div className="text-xs text-ink-soft">{[p.email, p.phone, [p.street, p.zip].filter(Boolean).join(' ')].filter(Boolean).join(' · ') || 'No contact details'}</div>
                     </li>
                   ))}
@@ -371,7 +371,7 @@ function Missing({ groups }: { groups: { label: string; list: Family[] }[] }) {
             {open === g.label && (
               <ul className="mt-3 flex flex-wrap gap-2">
                 {g.list.map((f) => (
-                  <li key={f.id}><Link className="inline-block rounded-full border border-line bg-white px-3 py-1 text-sm hover:border-brand" href={`/live/families?open=${f.id}`}>{f.name}{f.city ? `, ${f.city}` : ''}</Link></li>
+                  <li key={f.id}><Link className="inline-block rounded-full border border-line bg-white px-3 py-1 text-sm hover:border-brand" href={`/live/families/${f.id}`}>{f.name}{f.city ? `, ${f.city}` : ''}</Link></li>
                 ))}
               </ul>
             )}
