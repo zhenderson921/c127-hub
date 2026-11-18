@@ -1,0 +1,94 @@
+# Nightly backup of the C127 Hub database, kept outside Supabase.
+#
+# It takes a full copy of the hub's data and sign-ins, encrypts it, and stores
+# it in a place C127 owns. It keeps 30 daily copies and 12 monthly ones.
+#
+# Nothing secret is in this file. It needs three repository secrets, set once
+# under Settings > Secrets and variables > Actions (see docs/backups.md):
+#   SUPABASE_DB_URL     the database connection string (the "session pooler" one)
+#   BACKUP_PASSPHRASE   the passphrase the copies are encrypted with
+#   RCLONE_CONFIG       an rclone configuration with one remote named "c127backup"
+# Until all three are set the job does nothing and says so.
+
+name: Nightly backup
+
+on:
+  schedule:
+    - cron: '15 7 * * *' # 07:15 UTC, about 2 or 3 in the morning in Florida
+  workflow_dispatch: # also lets it be run by hand from the Actions tab
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+      RCLONE_CONFIG_CONTENT: ${{ secrets.RCLONE_CONFIG }}
+      # Where under the remote the copies go. Change it with a repository variable if needed.
+      BACKUP_PATH: ${{ vars.BACKUP_PATH || 'c127-hub-backups' }}
+    steps:
+      - name: Check the three secrets are set
+        id: ready
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ] || [ -z "$BACKUP_PASSPHRASE" ] || [ -z "$RCLONE_CONFIG_CONTENT" ]; then
+            echo "::warning::Backups are not set up yet: one or more of SUPABASE_DB_URL, BACKUP_PASSPHRASE, RCLONE_CONFIG is missing. Nothing was backed up."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Copy the database
+        if: steps.ready.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p out && chmod 700 out
+          # pg_dump from the same major version as the database (Postgres 17), run in a container.
+          # "public" is the hub's own data; "auth" is who can sign in.
+          docker run --rm -e PGURL="$SUPABASE_DB_URL" -v "$PWD/out:/out" postgres:17 \
+            sh -c 'pg_dump "$PGURL" --format=custom --no-owner --no-privileges --schema=public --schema=auth --file=/out/hub.dump'
+          sudo chown -R "$(id -u)" out
+          test -s out/hub.dump
+          # A count of rows in the main tables goes alongside, so a copy can be sanity-checked without opening it.
+          docker run --rm -e PGURL="$SUPABASE_DB_URL" postgres:17 \
+            psql "$PGURL" -At -c "select 'families ' || count(*) from public.families union all select 'people ' || count(*) from public.people union all select 'churches ' || count(*) from public.churches union all select 'interactions ' || count(*) from public.interactions union all select 'change_log ' || count(*) from public.change_log" > out/counts.txt || true
+          cat out/counts.txt
+
+      - name: Encrypt it
+        if: steps.ready.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          STAMP="$(date -u +%Y-%m-%d)"
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+          gpg --batch --yes --pinentry-mode loopback --symmetric --cipher-algo AES256 --passphrase "$BACKUP_PASSPHRASE" --output "out/c127-hub-$STAMP.dump.gpg" out/hub.dump
+          # The unencrypted copy never leaves this machine, which is thrown away when the job ends.
+          shred -u out/hub.dump || rm -f out/hub.dump
+          ls -la out
+
+      - name: Store it and tidy old copies
+        if: steps.ready.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq rclone > /dev/null
+          mkdir -p ~/.config/rclone
+          printf '%s' "$RCLONE_CONFIG_CONTENT" > ~/.config/rclone/rclone.conf
+          chmod 600 ~/.config/rclone/rclone.conf
+          FILE="out/c127-hub-$STAMP.dump.gpg"
+          rclone copyto "$FILE" "c127backup:$BACKUP_PATH/daily/c127-hub-$STAMP.dump.gpg"
+          rclone copyto out/counts.txt "c127backup:$BACKUP_PATH/daily/c127-hub-$STAMP.counts.txt"
+          # The copy made on the first of each month is also kept as that month's copy.
+          if [ "$(date -u +%d)" = "01" ]; then
+            rclone copyto "$FILE" "c127backup:$BACKUP_PATH/monthly/c127-hub-$(date -u +%Y-%m).dump.gpg"
+          fi
+          # Keep 30 daily copies and 12 monthly ones.
+          rclone delete "c127backup:$BACKUP_PATH/daily" --min-age 30d
+          rclone delete "c127backup:$BACKUP_PATH/monthly" --min-age 370d || true
+          rclone lsl "c127backup:$BACKUP_PATH/daily" | tail -5
+          rm -f ~/.config/rclone/rclone.conf

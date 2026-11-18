@@ -114,7 +114,8 @@ Next.js 15 (App Router), React 19, TypeScript, Tailwind 3, Supabase
   serve, request-help
 - `app/live/*` – the Live tool's screens: people, families, churches, review
   (Data check), experience (Experience follow-up), account (change password),
-  users (admins only), feedback (the builder only). Each of people, families and
+  users (admins only), history (admins can put changes back), feedback (the
+  builder only). Each of people, families and
   churches is a list plus a full page per record (`[id]/page.tsx`). Every
   person, family and church named on any page is a link to its page
   (`components/live/links.tsx`). Moving between them uses the browser's own
@@ -307,6 +308,26 @@ sidebar shows how many are still outstanding. Only the builder sees that page
 and that number: `profiles.is_builder`, set for Zane, and the `feedback`
 table's access rules send the rows to nobody else. The sender never sees the
 note or the status.
+
+## History and backups
+
+**History** (`/live/history`, linked for admins). Every insert, update and
+delete on the Live tool's tables is written to `change_log` by the
+`zz_log_change` trigger, with who made it. Changes made in one transaction
+share a `batch`, so joining two people or matching a church name shows as one
+change. Staff and coaches can read it; nobody writes to it directly. An admin
+can put a batch back with `undo_batch()`: it removes what the batch added,
+restores what it removed, and sets back only the fields it changed, so later
+edits to other fields survive. Putting something back is itself recorded and
+can be undone. A spreadsheet load is one very large batch; putting it back
+removes everything that load added.
+
+**Backups** (`.github/workflows/backup.yml`, `docs/backups.md`). A nightly
+GitHub Actions job that dumps the `public` and `auth` schemas, encrypts the
+file, and uploads it to C127-owned storage through rclone, keeping 30 daily
+and 12 monthly copies. It needs three repository secrets that only Zane or
+C127 can supply and does nothing until they are set. It has never been run
+against the real database: the first run and a restore test are still to do.
 
 ## What has been tested
 

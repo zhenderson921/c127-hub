@@ -73,7 +73,7 @@ export function ContactLog({ about, entries }: { about: { familyId?: string; chu
                 {!i.reached && <Badge tone="warn">No answer yet</Badge>}
               </div>
               {i.summary && <p className="mt-0.5 whitespace-pre-wrap text-ink">{i.summary}</p>}
-              {i.loggedBy && userNames[i.loggedBy] && <p className="mt-0.5 text-xs text-ink-soft">Logged by {userNames[i.loggedBy]}</p>}
+              {(i.loggedByName || (i.loggedBy && userNames[i.loggedBy])) && <p className="mt-0.5 text-xs text-ink-soft">Logged by {i.loggedByName || userNames[i.loggedBy!]}</p>}
             </li>
           ))}
         </ul>

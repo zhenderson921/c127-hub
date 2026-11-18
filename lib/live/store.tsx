@@ -89,6 +89,8 @@ interface LiveStore extends LiveData {
   sendFeedback: (f: { kind: FeedbackKind; message: string; pagePath: string; pageLabel: string }) => Promise<boolean>;
   /** Builder only: move a piece of feedback on, or note what was done. */
   updateFeedback: (id: string, patch: Partial<Pick<Feedback, 'status' | 'builderNote'>>) => Promise<boolean>;
+  /** Admins only: put back everything one change did. The whole hub is read again afterwards. */
+  undoBatch: (batch: number) => Promise<boolean>;
 }
 
 const Ctx = createContext<LiveStore | null>(null);
@@ -450,6 +452,17 @@ export function LiveProvider({ children }: { children: React.ReactNode }) {
         if (!row) return false;
         const saved = toFeedback(row);
         setData((d) => ({ ...d, feedback: d.feedback.map((x) => (x.id === id ? saved : x)) }));
+        return true;
+      },
+
+      undoBatch: async (batch) => {
+        const ok = await save('Putting that back', async (sb) => {
+          const { error: err } = await sb.rpc('undo_batch', { target: batch });
+          if (err) throw new Error(err.message);
+          return loadLive(sb);
+        });
+        if (!ok) return false;
+        setData(ok);
         return true;
       },
 

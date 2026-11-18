@@ -154,6 +154,8 @@ export interface Interaction {
   personId: string | null;
   churchId: string | null;
   loggedBy: string | null;
+  /** Kept on the entry, so it still says who logged it after their sign-in is removed. */
+  loggedByName: string;
 }
 
 export const STAGES = ['To do', 'Reached out', 'Responded', 'Step taken', 'Not needed'] as const;

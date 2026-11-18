@@ -31,7 +31,7 @@ export const toChild = (r: any): Child => ({ id: r.id, familyId: r.family_id, fi
 export const toCareCommunity = (r: any): CareCommunity => ({ id: r.id, familyId: r.family_id, churchId: r.church_id, status: r.status, launchedOn: r.launched_on ?? '', closedOn: r.closed_on ?? '' });
 
 export const toInteraction = (r: any): Interaction => ({
-  id: r.id, at: r.at, method: r.method, reached: r.reached, summary: r.summary ?? '', familyId: r.family_id, personId: r.person_id, churchId: r.church_id, loggedBy: r.logged_by,
+  id: r.id, at: r.at, method: r.method, reached: r.reached, summary: r.summary ?? '', familyId: r.family_id, personId: r.person_id, churchId: r.church_id, loggedBy: r.logged_by, loggedByName: r.logged_by_name ?? '',
 });
 export const toNextStep = (r: any): NextStep => ({ key: r.key, label: r.label, track: r.track, action: r.action ?? '', route: r.route, ownerId: r.owner_id, sort: r.sort, active: r.active });
 

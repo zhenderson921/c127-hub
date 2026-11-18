@@ -52,7 +52,7 @@ export function LiveShell({ children }: { children: React.ReactNode }) {
                 ? [{
                     group: 'Admin',
                     items: [
-                      ...(profile.isAdmin ? [{ href: '/live/users', label: 'Users' }] : []),
+                      ...(profile.isAdmin ? [{ href: '/live/users', label: 'Users' }, { href: '/live/history', label: 'History' }] : []),
                       // The number is how much feedback is still waiting to be dealt with.
                       ...(profile.isBuilder ? [{ href: '/live/feedback', label: 'Feedback', badge: feedback.filter(isOutstanding).length }] : []),
                     ],
