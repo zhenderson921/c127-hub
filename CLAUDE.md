@@ -107,7 +107,7 @@ Next.js 15 (App Router), React 19, TypeScript, Tailwind 3, Supabase
   churches, volunteers, map, experience, care, giving, reports, import, church,
   serve, request-help
 - `app/live/*` – the Live tool's screens: people, families, churches, review
-  (Data check), account (change password). Each of people, families and
+  (Data check), account (change password), users (admins only). Each of people, families and
   churches is a list plus a full page per record (`[id]/page.tsx`). Every
   person, family and church named on any page is a link to its page
   (`components/live/links.tsx`). Moving between them uses the browser's own
@@ -179,9 +179,16 @@ They are still there for now and nothing in the Live tool reads them.
 - Signed in with no profile row: sees nothing.
 - Not signed in: nothing.
 
-To give someone access: add them under Authentication in the Supabase
-dashboard, then insert a `profiles` row with their role (and `church_id` for an
-advocate). Zane has a `staff` account (2026-11-18).
+To give someone access: an admin adds them on the Users page (`/live/users`),
+typing a starter password that the person then replaces under "Change
+password". The page creates the sign-in with Supabase's ordinary sign-up, so
+it stops working if sign-ups are switched off in Supabase; in that case add
+the person in the dashboard and then on the Users page, which gives access to
+a sign-in that already exists. `profiles.is_admin` marks an admin, and only
+admins can change `profiles` (`admin_grant_access()`, migration
+`20261118030000_admins.sql`). An advocate still needs a `profiles` row
+inserted by hand with their `church_id`. Zane is the first admin. There is no
+password reset in the app: use the Supabase dashboard.
 
 The database holds C127's real records since the preload on 2026-11-18: 247
 churches, 703 families, 1,413 people, 2,113 children, 253 Care Communities.
@@ -302,8 +309,10 @@ legend shows churches as squares where Mapbox draws circles.
    Routing owners in `next_step_options` are blank on purpose and get set in
    the database, so no staff names live in the repo.
 3. **Edit screens** for adults and church people; advocate onboarding.
-4. **Turn off open sign-ups** in Supabase Authentication settings. Google
-   sign-in is deferred: email and password for now.
+4. **Sign-ups stay on for now**, because the Users page relies on them. An
+   account with no role sees nothing. To turn them off, move account creation
+   to a server route that uses the service role key. Google sign-in is
+   deferred: email and password for now.
 5. Later: geocoding and the match map on real addresses, events with
    attendance, linking gifts to people, email and text sending.
 

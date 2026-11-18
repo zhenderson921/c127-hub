@@ -41,7 +41,7 @@ export function LiveShell({ children }: { children: React.ReactNode }) {
   return (
     <ShellFrame
       view="live"
-      groups={team ? NAV : []}
+      groups={team ? (profile?.isAdmin ? [...NAV, { group: 'Admin', items: [{ href: '/live/users', label: 'Users' }] }] : NAV) : []}
       error={error}
       clearError={clearError}
       footer={
