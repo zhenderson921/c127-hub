@@ -20,7 +20,7 @@ export const msToDay = (ms: number): string => {
 const msToTs = (ms: number): string => new Date(ms).toISOString();
 
 /** PostgREST returns at most 1,000 rows per request, so read in pages. */
-async function all<T>(sb: SupabaseClient, table: string, order = 'created_at'): Promise<T[]> {
+export async function all<T>(sb: SupabaseClient, table: string, order = 'created_at'): Promise<T[]> {
   const out: T[] = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await sb.from(table).select('*').order(order, { ascending: false }).range(from, from + 999);

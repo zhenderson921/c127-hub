@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { churchRow, familyRow, guestRow, insertMany, loadAll, loadProfile, needRow, taskRow, type Profile } from './db';
+import { churchRow, familyRow, guestRow, insertMany, loadAll, needRow, taskRow, type Profile } from './db';
 import { buildSeed } from './seed';
 import { supabaseBrowser } from './supabase';
 import type { Church, Data, Family, Guest, Need, Task, Volunteer } from './types';
@@ -56,8 +56,9 @@ type Persist = (sb: SupabaseClient) => PromiseLike<{ error: { message: string } 
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<Data | null>(null);
-  const [mode, setMode] = useState<'demo' | 'live'>('demo');
-  const [profile, setProfile] = useState<Profile | null>(null);
+  // The Prototype never goes live. `mode` and `profile` stay so its screens read as before.
+  const mode: 'demo' | 'live' = 'demo';
+  const profile: Profile | null = null;
   const [error, setError] = useState<string | null>(null);
   const live = useRef(false);
 
@@ -66,27 +67,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
     (async () => {
-      const sb = supabaseBrowser();
-      const who = sb ? await loadProfile(sb).catch(() => null) : null;
-      if (cancelled) return;
-      if (sb && who) {
-        live.current = true;
-        setMode('live');
-        setProfile(who);
-        if (who.role === 'none') {
-          setData({ createdAt: Date.now(), coaches: [], churches: [], families: [], volunteers: [], needs: [], guests: [], tasks: [], gifts: [], log: [] });
-          return;
-        }
-        try {
-          await loadLive(sb);
-        } catch (e) {
-          setError(`Could not load the hub: ${(e as Error).message}`);
-          setData({ createdAt: Date.now(), coaches: [], churches: [], families: [], volunteers: [], needs: [], guests: [], tasks: [], gifts: [], log: [] });
-        }
-        return;
-      }
+      // The Prototype is always invented sample data kept in this browser, even for
+      // someone with a personal sign-in. Real records live in the Live tool (/live).
       let loaded: Data | null = null;
       try {
         const raw = localStorage.getItem(KEY);
@@ -98,10 +81,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (!loaded || daysSince(loaded.createdAt) > 7) loaded = buildSeed();
       setData(loaded);
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [loadLive]);
+  }, []);
 
   useEffect(() => {
     if (!data || live.current) return;

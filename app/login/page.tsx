@@ -3,9 +3,9 @@
 import { useState } from 'react';
 import { hasSupabase, supabaseBrowser } from '@/lib/supabase';
 
-function goNext() {
+function goNext(fallback: string) {
   const next = new URLSearchParams(window.location.search).get('next');
-  window.location.href = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
+  window.location.href = next && next.startsWith('/') && !next.startsWith('//') ? next : fallback;
 }
 
 export default function LoginPage() {
@@ -31,7 +31,7 @@ export default function LoginPage() {
     }
     // A personal sign-in always wins over an old demo session.
     await fetch('/api/logout', { method: 'POST' });
-    goNext();
+    goNext('/live');
   }
 
   async function openDemo(e: React.FormEvent) {
@@ -41,7 +41,8 @@ export default function LoginPage() {
     const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: demoPw }) });
     if (res.ok) {
       await supabaseBrowser()?.auth.signOut();
-      goNext();
+      // The demo password opens the Prototype only, so never send it on to the Live tool.
+      window.location.href = '/';
     } else {
       setDemoError('That password did not match. Check it and try again.');
       setBusy(false);
@@ -57,7 +58,7 @@ export default function LoginPage() {
         {hasSupabase && (
           <form onSubmit={signIn} className="rounded-lg bg-white p-6 shadow-xl">
             <h1 className="font-display text-3xl tracking-wide text-ink">C127 Hub</h1>
-            <p className="mt-1 text-sm text-ink-soft">Sign in with your own account to work with C127&rsquo;s records.</p>
+            <p className="mt-1 text-sm text-ink-soft">Sign in with your own account to open the Live tool and work with C127&rsquo;s records.</p>
             <label htmlFor="email" className="label mt-5">Email</label>
             <input id="email" type="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} className="field" autoComplete="username" />
             <label htmlFor="pw" className="label mt-3">Password</label>
@@ -71,18 +72,18 @@ export default function LoginPage() {
 
         {showDemo ? (
           <form onSubmit={openDemo} className={`rounded-lg bg-white p-6 shadow-xl ${hasSupabase ? 'mt-4' : ''}`}>
-            <h2 className="font-display text-2xl tracking-wide text-ink">{hasSupabase ? 'Demo' : 'C127 Hub'}</h2>
-            <p className="mt-1 text-sm text-ink-soft">Explore the hub with invented sample data. Nothing you do here touches real records.</p>
-            <label htmlFor="password" className="label mt-4">Demo password</label>
+            <h2 className="font-display text-2xl tracking-wide text-ink">{hasSupabase ? 'Prototype' : 'C127 Hub'}</h2>
+            <p className="mt-1 text-sm text-ink-soft">Explore the prototype with invented sample data. Nothing you do here touches real records.</p>
+            <label htmlFor="password" className="label mt-4">Prototype password</label>
             <input id="password" type="password" value={demoPw} onChange={(e) => setDemoPw(e.target.value)} className="field" autoComplete="off" />
             {demoError && <p role="alert" className="mt-2 text-sm text-alert">{demoError}</p>}
             <button type="submit" disabled={busy || !demoPw} className="btn-ghost mt-4 w-full font-display text-lg tracking-wider">
-              {busy ? 'Opening…' : 'Open the demo'}
+              {busy ? 'Opening…' : 'Open the prototype'}
             </button>
           </form>
         ) : (
           <button onClick={() => setShowDemo(true)} className="mt-4 w-full text-center text-sm text-white/60 underline hover:text-white">
-            Open the demo with sample data
+            Open the prototype with sample data
           </button>
         )}
         <p className="mt-6 text-center text-xs text-white/50">Because kids belong in families.</p>

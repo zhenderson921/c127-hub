@@ -7,8 +7,9 @@ const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 /**
  * Two ways in:
- *  - a personal sign-in (Supabase), which opens the live data that person is allowed to see
- *  - the shared demo password, which opens invented sample data kept in the browser
+ *  - a personal sign-in (Supabase), which opens the Live tool (/live) and the Prototype
+ *  - the shared demo password, which opens only the Prototype: invented sample data
+ *    kept in the browser. It never opens the Live tool.
  */
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -31,8 +32,9 @@ export async function middleware(req: NextRequest) {
     if (data.user) return res;
   }
 
+  const liveTool = pathname === '/live' || pathname.startsWith('/live/');
   const demo = req.cookies.get(AUTH_COOKIE)?.value;
-  if (demo && demo === (await authToken())) return NextResponse.next();
+  if (!liveTool && demo && demo === (await authToken())) return NextResponse.next();
 
   const url = req.nextUrl.clone();
   url.pathname = '/login';
