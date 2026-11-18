@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { lastContact } from '@/components/live/ContactLog';
+import { DateFilter, fitsAll, toMs, type DateConditions } from '@/components/live/DateFilter';
 import { ChurchSelect, HomeTypePicker } from '@/components/live/fields';
 import { ChurchLink, FamilyLink } from '@/components/live/links';
 import { SortTh, sortRows, type SortState } from '@/components/live/sort';
@@ -24,6 +25,7 @@ export default function LiveFamiliesPage() {
   const [type, setType] = useSticky('families.type', 'All');
   const [county, setCounty] = useSticky('families.county', 'All');
   const [conn, setConn] = useSticky('families.conn', 'All');
+  const [dates, setDates] = useSticky<DateConditions>('families.dates', {});
   const [kids, setKids] = useSticky('families.kids', 'Any');
   const [age, setAge] = useSticky('families.age', 'Any');
   const [sort, setSort] = useSticky<SortState>('families.sort', { by: 'family', dir: 1 });
@@ -68,6 +70,20 @@ export default function LiveFamiliesPage() {
   }, [children]);
   const kidsMatch = (n: number) => (kids === 'Any' ? true : kids === 'None' ? n === 0 : kids === '4 or more' ? n >= 4 : n === Number(kids));
 
+  // The most recent Care Community launch for each family, for the date filter.
+  const launchedBy = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const c of careCommunities) {
+      const t = toMs(c.launchedOn);
+      if (t !== null && t > (m[c.familyId] ?? 0)) m[c.familyId] = t;
+    }
+    return m;
+  }, [careCommunities]);
+  const datesOf = (f: (typeof families)[number]) => {
+    const lc = lastContact(contactBy[f.id] ?? []);
+    return { connected: lc.reached, attempt: lc.attempt, next: toMs(f.nextContactOn), added: toMs(f.createdAt), launched: launchedBy[f.id] ?? null };
+  };
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return families.filter(
@@ -77,6 +93,7 @@ export default function LiveFamiliesPage() {
         (type === 'All' || f.homeTypes.includes(type as HomeType)) &&
         (county === 'All' || f.county === county) &&
         kidsMatch(kidCount[f.id] || 0) &&
+        fitsAll(datesOf(f), dates) &&
         (age === 'Any' || !!bandsBy[f.id]?.has(age)) &&
         (conn === 'All' || (conn === 'Served by a church' ? !!f.servingChurchId : !f.servingChurchId)) &&
         (!needle ||
@@ -89,7 +106,7 @@ export default function LiveFamiliesPage() {
           (f.homeChurchId && churchById[f.homeChurchId]?.name.toLowerCase().includes(needle))),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [families, q, care, type, county, conn, kids, age, labels, adultsBy, churchById, kidCount, bandsBy]);
+  }, [families, q, care, type, county, conn, kids, age, dates, labels, adultsBy, churchById, kidCount, bandsBy, contactBy, launchedBy]);
 
   const rows = useMemo(() => {
     const churchOf = (id: string | null, typed: string) => (id && churchById[id] ? churchById[id].name : typed);
@@ -139,7 +156,7 @@ export default function LiveFamiliesPage() {
       </PageHeader>
 
       <Panel>
-        <div className="grid gap-3 border-b border-line p-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+        <div className="grid gap-3 border-b border-line p-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
           <div>
             <label htmlFor="lf-q" className="label">Search</label>
             <input id="lf-q" className="field" placeholder="Family, parent, city or church" value={q} onChange={(e) => set(() => setQ(e.target.value))} />
@@ -184,6 +201,13 @@ export default function LiveFamiliesPage() {
               <option>Any</option>
               {AGE_BANDS.map((b) => <option key={b}>{b}</option>)}
             </select>
+          </div>
+          <div className="flex items-end">
+            <DateFilter
+              fields={[{ key: 'connected', label: 'Last connected' }, { key: 'attempt', label: 'Last attempt to reach them' }, { key: 'next', label: 'Next contact', kind: 'ahead' }, { key: 'launched', label: 'Care Community launched' }, { key: 'added', label: 'Added to the hub' }]}
+              value={dates}
+              onChange={(v) => set(() => setDates(v))}
+            />
           </div>
         </div>
         <div className="px-4 py-2 text-xs text-ink-soft"><span className="num font-semibold text-ink">{num(rows.length)}</span> {rows.length === 1 ? 'family' : 'families'}</div>

@@ -8,11 +8,11 @@ export const toStaff = (r: any): Staff => ({ id: r.id, name: r.name, team: r.tea
 export const toChurch = (r: any): Church => ({
   id: r.id, name: r.name, campus: r.campus ?? '', status: r.status, street: r.street ?? '', city: r.town ?? '', state: r.state ?? '', zip: r.zip ?? '',
   county: r.county ?? '', website: r.website ?? '', coachId: r.coach_id, coachPriority: r.coach_priority ?? 'Normal', famActivities: r.fam_activities ?? [],
-  famStartedOn: r.launched_on ?? '', agreementSignedOn: r.agreement_signed_on ?? '', nextStep: r.next_step ?? '', nextContactOn: r.next_contact_on ?? '', notes: r.notes ?? '',
+  famStartedOn: r.launched_on ?? '', agreementSignedOn: r.agreement_signed_on ?? '', nextStep: r.next_step ?? '', nextContactOn: r.next_contact_on ?? '', notes: r.notes ?? '', createdAt: r.created_at,
 });
 
 export const toPerson = (r: any): Person => ({ id: r.id, firstName: r.first_name, lastName: r.last_name ?? '', email: r.email ?? '', phone: r.phone ?? '', street: r.street ?? '', city: r.city ?? '', state: r.state ?? '', zip: r.zip ?? '', county: r.county ?? '', notes: r.notes ?? '',
-  homeChurchId: r.home_church_id, homeChurchText: r.home_church_text ?? '',
+  homeChurchId: r.home_church_id, homeChurchText: r.home_church_text ?? '', createdAt: r.created_at,
 });
 
 export const toRole = (r: any): PersonRole => ({ id: r.id, personId: r.person_id, role: r.role, churchId: r.church_id, title: r.title ?? '', status: r.status });

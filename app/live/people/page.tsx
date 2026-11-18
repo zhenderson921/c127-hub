@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { DateFilter, fitsAll, toMs, type DateConditions } from '@/components/live/DateFilter';
 import { ChurchLink, PersonLink } from '@/components/live/links';
 import { SortTh, sortRows, type SortState } from '@/components/live/sort';
 import { Badge, PageHeader, Pager, Panel } from '@/components/ui';
@@ -37,6 +38,8 @@ interface Row {
   churchIds: string[];
   churchText: string; // what to show in the Church column
   sortChurch: string;
+  /** The dates that can be filtered on, in milliseconds. */
+  dates: Record<string, number | null>;
 }
 interface Option {
   value: string;
@@ -106,11 +109,12 @@ function FilterMenu({ label, options, selected, onChange, search }: { label: str
 }
 
 export default function LivePeoplePage() {
-  const { people, churches, families, members, roles, responses, visits } = useLive();
+  const { people, churches, families, members, roles, responses, visits, interactions } = useLive();
   const router = useRouter();
   // Search, filters, sorting and page are kept while you click into a person and come back.
   const [q, setQ] = useSticky('people.q', '');
   const [filters, setFilters] = useSticky<Record<FilterKey, string[]>>('people.filters', { tags: [], churches: [], homeTypes: [], counties: [], cities: [], contact: [] });
+  const [dates, setDates] = useSticky<DateConditions>('people.dates', {});
   const [sort, setSort] = useSticky<SortState>('people.sort', { by: 'name', dir: 1 });
   const [page, setPage] = useSticky('people.page', 0);
 
@@ -125,6 +129,15 @@ export default function LivePeoplePage() {
     for (const r of roles) rolesOf.set(r.personId, [...(rolesOf.get(r.personId) ?? []), r]);
     // Anyone who has visited the Center or answered the form is an Experience guest.
     const guests = new Set([...responses.map((r) => r.personId), ...visits.map((v) => v.personId)]);
+    const latest = (m: Map<string, number>, id: string | null, t: number | null) => {
+      if (id && t !== null && t > (m.get(id) ?? 0)) m.set(id, t);
+    };
+    const contacted = new Map<string, number>();
+    for (const i of interactions) if (i.reached) latest(contacted, i.personId, toMs(i.at));
+    const visited = new Map<string, number>();
+    for (const v of visits) latest(visited, v.personId, toMs(v.visitedOn));
+    const answered = new Map<string, number>();
+    for (const r of responses) latest(answered, r.personId, toMs(r.submittedAt));
     return people.map((p) => {
       const fams = (famOf.get(p.id) ?? []).map((id) => familyById.get(id)).filter((f) => !!f);
       const mine = rolesOf.get(p.id) ?? [];
@@ -138,9 +151,10 @@ export default function LivePeoplePage() {
         churchIds,
         churchText: named.join(', '),
         sortChurch: (named[0] ?? p.homeChurchText ?? '').toLowerCase(),
+        dates: { contacted: contacted.get(p.id) ?? null, visited: visited.get(p.id) ?? null, answered: answered.get(p.id) ?? null, added: toMs(p.createdAt) },
       };
     });
-  }, [people, families, members, roles, responses, visits, churchName]);
+  }, [people, families, members, roles, responses, visits, interactions, churchName]);
 
   // The choices each filter offers, with how many people each one covers.
   const options = useMemo<Record<FilterKey, Option[]>>(() => {
@@ -180,6 +194,7 @@ export default function LivePeoplePage() {
           filters.churches.some((v) => (v === NO_CHURCH ? !r.churchIds.length && !r.p.homeChurchText : v === TO_CONFIRM ? !r.churchIds.length && !!r.p.homeChurchText : r.churchIds.includes(v)))) &&
         // Contact details narrow the list: ticking "Has an email" and "Has a phone" means both.
         filters.contact.every((c) => hasContact(r.p, c)) &&
+        fitsAll(r.dates, dates) &&
         (!needle ||
           personName(r.p).toLowerCase().includes(needle) ||
           r.p.email.toLowerCase().includes(needle) ||
@@ -196,7 +211,7 @@ export default function LivePeoplePage() {
       city: (r) => r.p.city,
     };
     return sortRows(out, get[sort.by] ?? get.name, sort.dir);
-  }, [rows, q, filters, sort]);
+  }, [rows, q, filters, dates, sort]);
 
   const pages = Math.ceil(shown.length / PER);
   const visible = shown.slice(page * PER, page * PER + PER);
@@ -230,6 +245,11 @@ export default function LivePeoplePage() {
             {FILTERS.map((f) => (
               <FilterMenu key={f.key} label={f.label} search={f.search} options={options[f.key]} selected={filters[f.key]} onChange={(v) => setFilter(f.key, v)} />
             ))}
+            <DateFilter
+              fields={[{ key: 'contacted', label: 'Last contacted' }, { key: 'visited', label: 'Last visited the Center' }, { key: 'answered', label: 'Answered My Next Steps' }, { key: 'added', label: 'Added to the hub' }]}
+              value={dates}
+              onChange={(v) => { setDates(v); setPage(0); }}
+            />
           </div>
           {active.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5">

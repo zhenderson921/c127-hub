@@ -60,6 +60,7 @@ export interface Church {
   nextStep: string;
   nextContactOn: string;
   notes: string;
+  createdAt: string;
 }
 
 export interface Person {
@@ -77,6 +78,7 @@ export interface Person {
   homeChurchId: string | null;
   /** Their church as typed, while it is not matched to a church in the list. */
   homeChurchText: string;
+  createdAt: string;
 }
 
 export interface PersonRole {

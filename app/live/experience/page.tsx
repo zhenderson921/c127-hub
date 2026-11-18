@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Board } from '@/components/live/Board';
+import { DateFilter, fitsAll, toMs, type DateConditions } from '@/components/live/DateFilter';
 import { ChurchSelect } from '@/components/live/fields';
 import { ChurchLink, PersonLink } from '@/components/live/links';
 import { SortTh, ViewSwitch, sortRows, type SortState } from '@/components/live/sort';
@@ -99,6 +100,7 @@ function FollowUps({ items }: { items: Item[] }) {
   const [whose, setWhose] = useSticky('experience.whose', me ?? 'all');
   const [track, setTrack] = useSticky('experience.track', 'All');
   const [stage, setStage] = useSticky('experience.stage', 'Open');
+  const [dates, setDates] = useSticky<DateConditions>('experience.dates', {});
   const [q, setQ] = useSticky('experience.q', '');
   const [sort, setSort] = useSticky<SortState>('experience.sort', { by: 'visited', dir: -1 });
   const [page, setPage] = useSticky('experience.page', 0);
@@ -110,7 +112,8 @@ function FollowUps({ items }: { items: Item[] }) {
     (i) =>
       (whose === 'all' || (whose.startsWith('q:') ? i.f.queue === whose.slice(2) : i.f.staffId === whose)) &&
       (track === 'All' || i.step?.track === track) &&
-      (!needle || i.guest.toLowerCase().includes(needle) || i.church.toLowerCase().includes(needle)),
+      (!needle || i.guest.toLowerCase().includes(needle) || i.church.toLowerCase().includes(needle)) &&
+      fitsAll({ answered: i.visited }, dates),
   );
   const filtered = scoped.filter((i) => (stage === 'Open' ? i.f.stage !== 'Step taken' && i.f.stage !== 'Not needed' : stage === 'All' ? true : i.f.stage === stage));
   const get: Record<string, (i: Item) => string | number> = {
@@ -162,6 +165,7 @@ function FollowUps({ items }: { items: Item[] }) {
             <label htmlFor="fu-q" className="label">Search</label>
             <input id="fu-q" className="field" placeholder="Guest or church" value={q} onChange={(e) => reset(() => setQ(e.target.value))} />
           </div>
+          <DateFilter fields={[{ key: 'answered', label: 'Answered My Next Steps' }]} value={dates} onChange={(v) => reset(() => setDates(v))} />
           <ViewSwitch view={view} onChange={setView} />
         </div>
 
@@ -361,6 +365,7 @@ function FollowUpDetail({ item }: { item: Item }) {
 // ---------------------------------------------------------------------------
 function Answers() {
   const { responses, nextSteps, churches, people } = useLive();
+  const [dates, setDates] = useSticky<DateConditions>('answers.dates', {});
   const [q, setQ] = useSticky('answers.q', '');
   const [sort, setSort] = useSticky<SortState>('answers.sort', { by: 'date', dir: -1 });
   const [page, setPage] = useSticky('answers.page', 0);
@@ -378,7 +383,7 @@ function Answers() {
     steps: (r) => r.nextSteps.length,
     invite: (r) => r.likelyToInvite,
   };
-  const rows = sortRows(responses.filter((r) => !needle || name(r).toLowerCase().includes(needle) || churchOf(r).toLowerCase().includes(needle)), get[sort.by] ?? get.date, sort.dir);
+  const rows = sortRows(responses.filter((r) => (!needle || name(r).toLowerCase().includes(needle) || churchOf(r).toLowerCase().includes(needle)) && fitsAll({ answered: ms(r.submittedAt) }, dates)), get[sort.by] ?? get.date, sort.dir);
 
   return (
     <>
@@ -388,6 +393,7 @@ function Answers() {
             <label htmlFor="an-q" className="label">Search</label>
             <input id="an-q" className="field max-w-md" placeholder="Guest or church" value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} />
           </div>
+          <DateFilter fields={[{ key: 'answered', label: 'Answered My Next Steps' }]} value={dates} onChange={(v) => { setDates(v); setPage(0); }} />
           <button className="btn-primary" onClick={() => setAdding(true)}>Add an answer by hand</button>
         </div>
         <div className="px-4 py-2 text-xs text-ink-soft"><span className="num font-semibold text-ink">{num(rows.length)}</span> {rows.length === 1 ? 'answer' : 'answers'}</div>

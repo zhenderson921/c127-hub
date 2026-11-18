@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { lastContact } from '@/components/live/ContactLog';
+import { DateFilter, fitsAll, toMs, type DateConditions } from '@/components/live/DateFilter';
 import { Board } from '@/components/live/Board';
 import { ChurchLink } from '@/components/live/links';
 import { SortTh, ViewSwitch, sortRows, type SortState } from '@/components/live/sort';
@@ -25,6 +26,7 @@ export default function LiveChurchesPage() {
   const [q, setQ] = useSticky('churches.q', '');
   const [status, setStatus] = useSticky('churches.status', 'All');
   const [coach, setCoach] = useSticky('churches.coach', 'All');
+  const [dates, setDates] = useSticky<DateConditions>('churches.dates', {});
   const [view, setView] = useSticky<'table' | 'board'>('churches.view', 'table');
   const [sort, setSort] = useSticky<SortState>('churches.sort', { by: 'church', dir: 1 });
   const [adding, setAdding] = useState(false);
@@ -51,7 +53,8 @@ export default function LiveChurchesPage() {
   const scoped = churches.filter(
     (c) =>
       (coach === 'All' || (coach === 'none' ? !c.coachId : c.coachId === coach)) &&
-      (!needle || c.name.toLowerCase().includes(needle) || c.campus.toLowerCase().includes(needle) || c.city.toLowerCase().includes(needle)),
+      (!needle || c.name.toLowerCase().includes(needle) || c.campus.toLowerCase().includes(needle) || c.city.toLowerCase().includes(needle)) &&
+      fitsAll({ connected: lastContact(contactBy[c.id] ?? []).reached, next: toMs(c.nextContactOn), started: toMs(c.famStartedOn), agreement: toMs(c.agreementSignedOn), added: toMs(c.createdAt) }, dates),
   );
   const get: Record<string, (c: (typeof churches)[number]) => string | number | null> = {
     church: (c) => `${c.name} ${c.campus}`,
@@ -93,7 +96,14 @@ export default function LiveChurchesPage() {
               <option value="none">No coach yet</option>
             </select>
           </div>
-          <ViewSwitch view={view} onChange={setView} />
+          <div className="flex items-end gap-2">
+            <DateFilter
+              fields={[{ key: 'connected', label: 'Last connected' }, { key: 'next', label: 'Next contact', kind: 'ahead' }, { key: 'started', label: 'FAM start date' }, { key: 'agreement', label: 'Agreement signed' }, { key: 'added', label: 'Added to the hub' }]}
+              value={dates}
+              onChange={setDates}
+            />
+            <ViewSwitch view={view} onChange={setView} />
+          </div>
         </div>
         {view === 'board' ? (
           <div className="p-4">

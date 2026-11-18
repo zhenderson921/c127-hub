@@ -287,6 +287,10 @@ HubSpot (since mid-October 2026); a public form that writes straight to the
 hub is the next piece, and would need its own access rule for signed-out
 visitors.
 
+Every list has a Dates button (`components/live/DateFilter.tsx`) that filters
+on its dates, such as last connected, next contact, added to the hub, FAM
+start date or when a guest answered. "Not in the last 30 days" includes never.
+
 Every table in the Live tool sorts by clicking a heading
 (`components/live/sort.tsx`), and anything that moves through stages can be
 shown as a board (`components/live/Board.tsx`): churches by status, follow-ups
