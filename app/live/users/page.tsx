@@ -2,6 +2,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { useCallback, useEffect, useState } from 'react';
+import { SortTh, sortRows, type SortState } from '@/components/live/sort';
 import { Badge, PageHeader, Panel } from '@/components/ui';
 import { useLive } from '@/lib/live/store';
 import { SUPABASE_KEY, SUPABASE_URL, supabaseBrowser } from '@/lib/supabase';
@@ -26,6 +27,7 @@ export default function UsersPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [sort, setSort] = useState<SortState>({ by: 'added', dir: 1 });
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'staff' as 'staff' | 'coach', admin: false });
 
   const load = useCallback(async () => {
@@ -107,10 +109,10 @@ export default function UsersPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="border-b border-line bg-paper">
-                <tr><th className="th">Name</th><th className="th">Email</th><th className="th">Role</th><th className="th">Admin</th><th className="th">Added</th><th className="th"><span className="sr-only">Remove</span></th></tr>
+                <tr><SortTh col="name" label="Name" sort={sort} onSort={setSort} /><SortTh col="email" label="Email" sort={sort} onSort={setSort} /><SortTh col="role" label="Role" sort={sort} onSort={setSort} /><SortTh col="admin" label="Admin" sort={sort} onSort={setSort} /><SortTh col="added" label="Added" sort={sort} onSort={setSort} /><th className="th"><span className="sr-only">Remove</span></th></tr>
               </thead>
               <tbody>
-                {users.map((u) => {
+                {sortRows(users, (u) => (sort.by === 'name' ? u.name : sort.by === 'email' ? u.email : sort.by === 'role' ? u.role : sort.by === 'admin' ? (u.isAdmin ? 0 : 1) : u.added), sort.dir).map((u) => {
                   const me = u.id === profile.id;
                   return (
                     <tr key={u.id} className="border-b border-line last:border-0">

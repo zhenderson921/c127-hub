@@ -14,6 +14,7 @@ const NAV: NavGroup[] = [
       { href: '/live/churches', label: 'Churches' },
     ],
   },
+  { group: 'Ministry', items: [{ href: '/live/experience', label: 'Experience follow-up' }] },
   { group: 'Data', items: [{ href: '/live/review', label: 'Data check' }] },
 ];
 

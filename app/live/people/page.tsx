@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChurchLink, PersonLink } from '@/components/live/links';
+import { SortTh, sortRows, type SortState } from '@/components/live/sort';
 import { Badge, PageHeader, Pager, Panel } from '@/components/ui';
 import { churchLabel } from '@/lib/live/match';
 import { useSticky } from '@/lib/live/sticky';
@@ -27,7 +28,7 @@ const FILTERS: { key: FilterKey; label: string; search?: boolean }[] = [
   { key: 'contact', label: 'Contact details' },
 ];
 const CONTACT = ['Has an email', 'No email', 'Has a phone', 'No phone'];
-const tagTone = (t: string) => (t === 'Family adult' ? 'brand' : t === 'Advocate' || t === 'Point Person' ? 'good' : t === NO_TAG ? 'gray' : 'warn');
+const tagTone = (t: string) => (t === 'Experience guest' ? 'gray' : t === 'Family adult' ? 'brand' : t === 'Advocate' || t === 'Point Person' ? 'good' : t === NO_TAG ? 'gray' : 'warn');
 
 interface Row {
   p: Person;
@@ -105,12 +106,12 @@ function FilterMenu({ label, options, selected, onChange, search }: { label: str
 }
 
 export default function LivePeoplePage() {
-  const { people, churches, families, members, roles } = useLive();
+  const { people, churches, families, members, roles, responses, visits } = useLive();
   const router = useRouter();
   // Search, filters, sorting and page are kept while you click into a person and come back.
   const [q, setQ] = useSticky('people.q', '');
   const [filters, setFilters] = useSticky<Record<FilterKey, string[]>>('people.filters', { tags: [], churches: [], homeTypes: [], counties: [], cities: [], contact: [] });
-  const [sort, setSort] = useSticky<{ by: 'name' | 'church' | 'city'; dir: 1 | -1 }>('people.sort', { by: 'name', dir: 1 });
+  const [sort, setSort] = useSticky<SortState>('people.sort', { by: 'name', dir: 1 });
   const [page, setPage] = useSticky('people.page', 0);
 
   const churchName = useMemo(() => new Map(churches.map((c) => [c.id, churchLabel(c)])), [churches]);
@@ -122,10 +123,12 @@ export default function LivePeoplePage() {
     for (const m of members) famOf.set(m.personId, [...(famOf.get(m.personId) ?? []), m.familyId]);
     const rolesOf = new Map<string, typeof roles>();
     for (const r of roles) rolesOf.set(r.personId, [...(rolesOf.get(r.personId) ?? []), r]);
+    // Anyone who has visited the Center or answered the form is an Experience guest.
+    const guests = new Set([...responses.map((r) => r.personId), ...visits.map((v) => v.personId)]);
     return people.map((p) => {
       const fams = (famOf.get(p.id) ?? []).map((id) => familyById.get(id)).filter((f) => !!f);
       const mine = rolesOf.get(p.id) ?? [];
-      const tags = [...new Set([...(fams.length ? ['Family adult'] : []), ...mine.map((r) => r.role)])];
+      const tags = [...new Set([...(fams.length ? ['Family adult'] : []), ...mine.map((r) => r.role), ...(guests.has(p.id) ? ['Experience guest'] : [])])];
       const churchIds = [...new Set([...mine.map((r) => r.churchId), p.homeChurchId].filter((id): id is string => !!id))];
       const named = churchIds.map((id) => churchName.get(id) ?? '').filter(Boolean);
       return {
@@ -137,7 +140,7 @@ export default function LivePeoplePage() {
         sortChurch: (named[0] ?? p.homeChurchText ?? '').toLowerCase(),
       };
     });
-  }, [people, families, members, roles, churchName]);
+  }, [people, families, members, roles, responses, visits, churchName]);
 
   // The choices each filter offers, with how many people each one covers.
   const options = useMemo<Record<FilterKey, Option[]>>(() => {
@@ -184,8 +187,15 @@ export default function LivePeoplePage() {
           r.churchText.toLowerCase().includes(needle) ||
           r.p.homeChurchText.toLowerCase().includes(needle)),
     );
-    const key = (r: Row) => (sort.by === 'name' ? `${r.p.lastName} ${r.p.firstName}`.toLowerCase() : sort.by === 'church' ? r.sortChurch || '￿' : r.p.city.toLowerCase() || '￿');
-    return out.sort((a, b) => key(a).localeCompare(key(b)) * sort.dir || personName(a.p).localeCompare(personName(b.p)));
+    const get: Record<string, (r: Row) => string> = {
+      name: (r) => `${r.p.lastName} ${r.p.firstName}`.trim(),
+      tags: (r) => r.tags.join(', '),
+      church: (r) => r.sortChurch,
+      email: (r) => r.p.email,
+      phone: (r) => r.p.phone,
+      city: (r) => r.p.city,
+    };
+    return sortRows(out, get[sort.by] ?? get.name, sort.dir);
   }, [rows, q, filters, sort]);
 
   const pages = Math.ceil(shown.length / PER);
@@ -195,14 +205,6 @@ export default function LivePeoplePage() {
     setFilters((f) => ({ ...f, [key]: v }));
     setPage(0);
   };
-  const header = (by: 'name' | 'church' | 'city', label: string) => (
-    <th className="th" aria-sort={sort.by === by ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}>
-      <button className="flex items-center gap-1 uppercase tracking-wide hover:text-ink" onClick={() => setSort((s) => ({ by, dir: s.by === by && s.dir === 1 ? -1 : 1 }))}>
-        {label}
-        <span aria-hidden className={sort.by === by ? 'text-ink' : 'text-ink-faint'}>{sort.by === by && sort.dir === -1 ? '▴' : '▾'}</span>
-      </button>
-    </th>
-  );
 
   return (
     <>
@@ -247,7 +249,14 @@ export default function LivePeoplePage() {
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="border-y border-line bg-paper">
-              <tr>{header('name', 'Name')}<th className="th">Tags</th>{header('church', 'Church')}<th className="th">Email</th><th className="th">Phone</th>{header('city', 'City')}</tr>
+              <tr>
+                <SortTh col="name" label="Name" sort={sort} onSort={setSort} />
+                <SortTh col="tags" label="Tags" sort={sort} onSort={setSort} />
+                <SortTh col="church" label="Church" sort={sort} onSort={setSort} />
+                <SortTh col="email" label="Email" sort={sort} onSort={setSort} />
+                <SortTh col="phone" label="Phone" sort={sort} onSort={setSort} />
+                <SortTh col="city" label="City" sort={sort} onSort={setSort} />
+              </tr>
             </thead>
             <tbody>
               {visible.map((r) => (

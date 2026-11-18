@@ -5,10 +5,11 @@ import { useMemo, useState } from 'react';
 import { lastContact } from '@/components/live/ContactLog';
 import { ChurchSelect, HomeTypePicker } from '@/components/live/fields';
 import { ChurchLink, FamilyLink } from '@/components/live/links';
+import { SortTh, sortRows, type SortState } from '@/components/live/sort';
 import { Badge, Drawer, PageHeader, Pager, Panel } from '@/components/ui';
 import { useSticky } from '@/lib/live/sticky';
 import { useLive, type NewAdult } from '@/lib/live/store';
-import { CARE_STATUSES, HOME_TYPES, MARITAL_STATUSES, MEMBER_RELATIONSHIPS, SERVING_STATUSES, careLabel, personName, type CareStatus, type HomeType, type MaritalStatus, type MemberRelationship } from '@/lib/live/types';
+import { CARE_STATUSES, HOME_TYPES, MARITAL_STATUSES, MEMBER_RELATIONSHIPS, SERVING_STATUSES, AGE_BANDS, careLabel, childBand, personName, type CareStatus, type HomeType, type MaritalStatus, type MemberRelationship } from '@/lib/live/types';
 import { ago, daysSince, downloadCsv, fmtDateLong, num } from '@/lib/util';
 
 const PER = 25;
@@ -23,6 +24,9 @@ export default function LiveFamiliesPage() {
   const [type, setType] = useSticky('families.type', 'All');
   const [county, setCounty] = useSticky('families.county', 'All');
   const [conn, setConn] = useSticky('families.conn', 'All');
+  const [kids, setKids] = useSticky('families.kids', 'Any');
+  const [age, setAge] = useSticky('families.age', 'Any');
+  const [sort, setSort] = useSticky<SortState>('families.sort', { by: 'family', dir: 1 });
   const [page, setPage] = useSticky('families.page', 0);
   const [adding, setAdding] = useState(false);
 
@@ -56,7 +60,15 @@ export default function LiveFamiliesPage() {
   const labels = useMemo(() => Object.fromEntries(families.map((f) => [f.id, careLabel(f, careCommunities)])), [families, careCommunities]);
   const careOptions = useMemo(() => Array.from(new Set(['Active Care Community', 'Building team', ...CARE_STATUSES, ...Object.values(labels)])), [labels]);
 
-  const rows = useMemo(() => {
+  // The age bands of the children in each home, for the "Child age" filter.
+  const bandsBy = useMemo(() => {
+    const m: Record<string, Set<string>> = {};
+    for (const c of children) if (c.inHome) (m[c.familyId] ||= new Set()).add(childBand(c));
+    return m;
+  }, [children]);
+  const kidsMatch = (n: number) => (kids === 'Any' ? true : kids === 'None' ? n === 0 : kids === '4 or more' ? n >= 4 : n === Number(kids));
+
+  const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return families.filter(
       (f) =>
@@ -64,6 +76,8 @@ export default function LiveFamiliesPage() {
         (care === 'All' || care === 'Closed families' ? care === 'All' || f.familyStatus === 'Closed' : labels[f.id] === care) &&
         (type === 'All' || f.homeTypes.includes(type as HomeType)) &&
         (county === 'All' || f.county === county) &&
+        kidsMatch(kidCount[f.id] || 0) &&
+        (age === 'Any' || !!bandsBy[f.id]?.has(age)) &&
         (conn === 'All' || (conn === 'Served by a church' ? !!f.servingChurchId : !f.servingChurchId)) &&
         (!needle ||
           f.name.toLowerCase().includes(needle) ||
@@ -74,7 +88,23 @@ export default function LiveFamiliesPage() {
           f.homeChurchText.toLowerCase().includes(needle) ||
           (f.homeChurchId && churchById[f.homeChurchId]?.name.toLowerCase().includes(needle))),
     );
-  }, [families, q, care, type, county, conn, labels, adultsBy, churchById]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [families, q, care, type, county, conn, kids, age, labels, adultsBy, churchById, kidCount, bandsBy]);
+
+  const rows = useMemo(() => {
+    const churchOf = (id: string | null, typed: string) => (id && churchById[id] ? churchById[id].name : typed);
+    const get: Record<string, (f: (typeof families)[number]) => string | number | null> = {
+      family: (f) => f.name,
+      type: (f) => f.homeTypes.join(' / '),
+      city: (f) => f.city,
+      children: (f) => kidCount[f.id] || 0,
+      care: (f) => labels[f.id],
+      home: (f) => churchOf(f.homeChurchId, f.homeChurchText),
+      serving: (f) => churchOf(f.servingChurchId, f.servingChurchText),
+      last: (f) => lastContact(contactBy[f.id] ?? []).reached,
+    };
+    return sortRows(filtered, get[sort.by] ?? get.family, sort.dir);
+  }, [filtered, sort, churchById, kidCount, labels, contactBy]);
 
   const pages = Math.ceil(rows.length / PER);
   const shown = rows.slice(page * PER, page * PER + PER);
@@ -109,7 +139,7 @@ export default function LiveFamiliesPage() {
       </PageHeader>
 
       <Panel>
-        <div className="grid gap-3 border-b border-line p-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 border-b border-line p-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
           <div>
             <label htmlFor="lf-q" className="label">Search</label>
             <input id="lf-q" className="field" placeholder="Family, parent, city or church" value={q} onChange={(e) => set(() => setQ(e.target.value))} />
@@ -142,12 +172,34 @@ export default function LiveFamiliesPage() {
               <option>All</option><option>Served by a church</option><option>No serving church</option>
             </select>
           </div>
+          <div>
+            <label htmlFor="lf-kids" className="label">Children in the home</label>
+            <select id="lf-kids" className="field" value={kids} onChange={(e) => set(() => setKids(e.target.value))}>
+              <option>Any</option><option>None</option><option>1</option><option>2</option><option>3</option><option>4 or more</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="lf-age" className="label">Child age</label>
+            <select id="lf-age" className="field" value={age} onChange={(e) => set(() => setAge(e.target.value))} title="Families with at least one child in this age band. Ages loaded from the spreadsheet are as it listed them.">
+              <option>Any</option>
+              {AGE_BANDS.map((b) => <option key={b}>{b}</option>)}
+            </select>
+          </div>
         </div>
         <div className="px-4 py-2 text-xs text-ink-soft"><span className="num font-semibold text-ink">{num(rows.length)}</span> {rows.length === 1 ? 'family' : 'families'}</div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="border-y border-line bg-paper">
-              <tr><th className="th">Family</th><th className="th">Home type</th><th className="th">City</th><th className="th text-right">Children</th><th className="th">Care</th><th className="th">Home church</th><th className="th">Serving church</th><th className="th">Last connected</th></tr>
+              <tr>
+                <SortTh col="family" label="Family" sort={sort} onSort={setSort} />
+                <SortTh col="type" label="Home type" sort={sort} onSort={setSort} />
+                <SortTh col="city" label="City" sort={sort} onSort={setSort} />
+                <SortTh col="children" label="Children" sort={sort} onSort={setSort} right />
+                <SortTh col="care" label="Care" sort={sort} onSort={setSort} />
+                <SortTh col="home" label="Home church" sort={sort} onSort={setSort} />
+                <SortTh col="serving" label="Serving church" sort={sort} onSort={setSort} />
+                <SortTh col="last" label="Last connected" sort={sort} onSort={setSort} />
+              </tr>
             </thead>
             <tbody>
               {shown.map((f) => {

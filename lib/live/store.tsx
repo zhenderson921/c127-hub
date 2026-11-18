@@ -4,8 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadProfile, type Profile } from '../db';
 import { supabaseBrowser } from '../supabase';
-import { churchColumns, familyColumns, loadLive, personColumns, toCareCommunity, toChild, toChurch, toFamily, toInteraction, toMember, toPerson, toRole, toStaff } from './db';
-import { EMPTY, type CareCommunity, type Child, type Church, type ChurchRole, type Family, type LiveData, type MemberRelationship, type Method, type Person } from './types';
+import { churchColumns, familyColumns, loadLive, personColumns, toFollowUp, toNextStep, toCareCommunity, toChild, toChurch, toFamily, toInteraction, toMember, toPerson, toRole, toStaff } from './db';
+import { EMPTY, type CareCommunity, type Child, type Church, type ChurchRole, type Family, type LiveData, type FollowUp, type MemberRelationship, type Method, type NextStep, type Person } from './types';
 
 export interface NewAdult {
   firstName: string;
@@ -33,6 +33,17 @@ export interface NewContact {
   method: Method;
   reached: boolean;
   summary: string;
+}
+
+export interface NewResponse {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  churchId: string | null;
+  homeChurchText: string;
+  nextSteps: string[];
+  comments: string;
 }
 
 interface LiveStore extends LiveData {
@@ -64,6 +75,15 @@ interface LiveStore extends LiveData {
   mergePeople: (keepId: string, removeId: string) => Promise<boolean>;
   /** Mark a Data check item as looked at and fine as it is. */
   dismiss: (kind: 'church_name' | 'people' | 'families' | 'churches', key: string) => Promise<boolean>;
+  // Experience follow-up
+  /** Move a follow-up to another stage, or hand it to a person or a shared queue. */
+  updateFollowUp: (id: string, patch: Partial<Pick<FollowUp, 'stage' | 'staffId' | 'queue' | 'outcome'>>) => Promise<boolean>;
+  /** Record a guest's answers by hand. The database then makes their follow-ups. */
+  addResponse: (r: NewResponse) => Promise<boolean>;
+  /** Change how one of the form's choices is followed up. */
+  updateNextStep: (key: string, patch: Partial<Pick<NextStep, 'action' | 'route' | 'ownerId' | 'active'>>) => Promise<boolean>;
+  /** Add a staff member, so follow-ups can be given to them. */
+  addStaff: (name: string, team: string) => Promise<boolean>;
 }
 
 const Ctx = createContext<LiveStore | null>(null);
@@ -332,6 +352,67 @@ export function LiveProvider({ children }: { children: React.ReactNode }) {
         });
         if (!ok) return false;
         setData((d) => ({ ...d, dismissed: [...d.dismissed, `${kind}:${key}`] }));
+        return true;
+      },
+
+      updateFollowUp: async (id, patch) => {
+        const cols: Record<string, unknown> = {};
+        if (patch.stage !== undefined) cols.stage = patch.stage;
+        if (patch.staffId !== undefined) cols.coach_id = patch.staffId;
+        if (patch.queue !== undefined) cols.queue = patch.queue;
+        if (patch.outcome !== undefined) cols.outcome = orNull(patch.outcome);
+        const row = await save('That change', (sb) => patchRow(sb, 'tasks', id, cols));
+        if (!row) return false;
+        const saved = changed(toFollowUp(row), patch);
+        setData((d) => ({ ...d, followUps: d.followUps.map((f) => (f.id === id ? { ...f, ...saved } : f)) }));
+        return true;
+      },
+
+      addResponse: async (r) => {
+        const ok = await save('That answer', async (sb) => {
+          // Someone already in the hub with this email and first name is the same person.
+          const mail = r.email.trim().toLowerCase();
+          const known = mail ? data.people.find((p) => p.email.toLowerCase() === mail && p.firstName.trim().toLowerCase() === r.firstName.trim().toLowerCase()) : undefined;
+          const personId =
+            known?.id ??
+            (
+              await insert(sb, 'people', {
+                first_name: r.firstName.trim(), last_name: orNull(r.lastName), email: orNull(mail), phone: orNull(r.phone),
+                home_church_id: r.churchId, home_church_text: r.churchId ? null : orNull(r.homeChurchText), source: 'Hub',
+              })
+            ).id;
+          await insert(sb, 'vce_responses', {
+            person_id: personId, first_name: r.firstName.trim(), last_name: orNull(r.lastName), email: orNull(mail), phone: orNull(r.phone),
+            church_id: r.churchId, home_church_text: r.churchId ? null : orNull(r.homeChurchText), next_steps: r.nextSteps, comments: orNull(r.comments), source: 'Hub form',
+          });
+          return loadLive(sb);
+        });
+        if (!ok) return false;
+        setData(ok);
+        return true;
+      },
+
+      updateNextStep: async (key, patch) => {
+        const cols: Record<string, unknown> = {};
+        if (patch.action !== undefined) cols.action = orNull(patch.action);
+        if (patch.route !== undefined) cols.route = patch.route;
+        if (patch.ownerId !== undefined) cols.owner_id = patch.ownerId;
+        if (patch.active !== undefined) cols.active = patch.active;
+        const row = await save('That change', async (sb) => {
+          const { data: out, error: err } = await sb.from('next_step_options').update(cols).eq('key', key).select().single();
+          if (err) throw new Error(err.message);
+          return out;
+        });
+        if (!row) return false;
+        const saved = changed(toNextStep(row), patch);
+        setData((d) => ({ ...d, nextSteps: d.nextSteps.map((n) => (n.key === key ? { ...n, ...saved } : n)) }));
+        return true;
+      },
+
+      addStaff: async (name, team) => {
+        const row = await save('That person', (sb) => insert(sb, 'coaches', { name: name.trim(), team }));
+        if (!row) return false;
+        setData((d) => ({ ...d, staff: [...d.staff, toStaff(row)].sort((a, b) => a.name.localeCompare(b.name)) }));
         return true;
       },
 

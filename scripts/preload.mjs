@@ -7,10 +7,12 @@
 //                                       and loads it in one all-or-nothing step
 //
 // Options:  --dir "<folder>"   where the spreadsheets are (default ../C127 Historic Docs)
-//           --only churches,advocates,families   load just some of them
+//           --only churches,advocates,families,experience   load just some of them
 //
 // It reads the "Churches" and "Current Advocates" tabs of "Church Spreadsheet*.xlsx"
-// and the "Main Information" tab of "Family Spreadsheet*.xlsx". Running it twice is
+// and the "Main Information" tab of "Family Spreadsheet*.xlsx". For the Experience it
+// reads the "VISITS" tab of "CCC_Visitors*.xlsx" and "Form Responses 1" of
+// "My Next Steps*.xlsx"; each answer becomes follow-ups in the hub. Running it twice is
 // safe: churches, people and families that are already in the hub are skipped.
 //
 // Everything is loaded, including the parts that are not certain. A church name
@@ -32,7 +34,7 @@ const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
 const option = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
 const DIR = path.resolve(option('--dir', path.join(here, '..', '..', 'C127 Historic Docs')));
-const ONLY = option('--only', 'churches,advocates,families').split(',').map((s) => s.trim());
+const ONLY = option('--only', 'churches,advocates,families,experience').split(',').map((s) => s.trim());
 const LOAD = flag('--load');
 
 // ---------------------------------------------------------------------------
@@ -181,8 +183,18 @@ async function readTab(file, tabName, expected) {
     for (const n of names) if (index.has(norm(n))) return row[index.get(norm(n))];
     return null;
   };
+  // For a form question, whose heading is the whole question: match on how it starts.
+  const getStarting = (row, start) => {
+    const i = headers.findIndex((h) => norm(h).startsWith(norm(start)));
+    return i < 0 ? null : row[i];
+  };
+  // The second column with a given heading, for sheets that repeat one.
+  const getSecond = (row, name) => {
+    const hits = headers.map((h, i) => (norm(h) === norm(name) ? i : -1)).filter((i) => i >= 0);
+    return hits.length > 1 ? row[hits[1]] : null;
+  };
   const missing = expected.filter((h) => !index.has(norm(h)));
-  return { file: path.basename(file), tab: sheet.sheet.trim(), headers, rows, get, missing };
+  return { file: path.basename(file), tab: sheet.sheet.trim(), headers, rows, get, getStarting, getSecond, missing };
 }
 
 // ---------------------------------------------------------------------------
@@ -200,7 +212,9 @@ class Hub {
     this.onboarded = new Set(existing.advocate_onboarding.map((r) => r.person_id));
     this.familyKeys = new Set(existing.families.map((f) => familyKey(f.name, f.street, f.zip)));
     this.familyMembers = new Set(existing.family_members.map((m) => m.person_id));
-    this.out = { coaches: [], churches: [], church_aliases: [], people: [], person_roles: [], advocate_onboarding: [], families: [], family_members: [], children: [], care_communities: [] };
+    this.visitCodes = new Set(existing.visits.map((v) => v.visit_code));
+    this.responseIds = new Set(existing.vce_responses.map((r) => r.external_id));
+    this.out = { coaches: [], churches: [], church_aliases: [], people: [], person_roles: [], advocate_onboarding: [], families: [], family_members: [], children: [], care_communities: [], visits: [], vce_responses: [] };
     this.unmatched = new Map(); // typed church name -> { name, where:Set, rows }
     this.loose = new Map(); // typed name -> church id, matched on the boiled-down name
   }
@@ -575,6 +589,102 @@ function loadFamilies(tab, hub, tally) {
 }
 
 // ---------------------------------------------------------------------------
+// The Experience: the Center's visitor log and the "My Next Steps" form
+// ---------------------------------------------------------------------------
+const VISIT_COLUMNS = ['Visit ID', 'Email', 'Date', 'First Name', 'Last Name', 'Church/ Org', 'Visit Type'];
+const VISIT_TYPES = ['VCE', 'Tour', 'Appointment', 'Training', 'Event', 'Drop-In', 'Volunteer', 'Community Gathering'];
+
+function loadVisits(tab, hub, tally) {
+  for (const row of tab.rows) {
+    const code = text(tab.get(row, 'Visit ID'));
+    const first = text(tab.get(row, 'First Name'));
+    const last = text(tab.get(row, 'Last Name'));
+    const on = day(tab.get(row, 'Date'));
+    if (!code) continue;
+    if (!on || (!first && !last)) {
+      // The sheet reserves a row per head counted in a group. Without a name and a date there is nothing to keep.
+      tally.add('rows that only hold a place in a headcount (skipped)');
+      continue;
+    }
+    if (hub.visitCodes.has(code)) {
+      tally.add('visits already in the hub (skipped)');
+      continue;
+    }
+    hub.visitCodes.add(code);
+    const mail = email(tab.get(row, 'Email'));
+    const typedChurch = text(tab.get(row, 'Church/ Org'));
+    const churchId = hub.church(typedChurch);
+    const rawType = text(tab.get(row, 'Visit Type'));
+    const type = VISIT_TYPES.find((t) => norm(t) === norm(rawType)) ?? 'Event';
+    if (!VISIT_TYPES.some((t) => norm(t) === norm(rawType))) tally.add(`visit type "${rawType || 'blank'}" not recognised, set to Event`);
+    // A person record only when there is an email to know them by. Otherwise the name stays on the visit.
+    let personId = null;
+    if (mail && first) personId = hub.findPerson(first, last, mail, null) ?? hub.addPerson({ first, last, email: mail, homeChurchId: churchId, homeChurchText: churchId ? '' : typedChurch });
+    const purpose = text(tab.getSecond(row, 'Visit Type'));
+    hub.out.visits.push({
+      id: randomUUID(), visit_code: code, visited_on: on, person_id: personId, group_name: personId ? null : `${first} ${last}`.trim(), party_size: 1, visit_type: type,
+      offerings: purpose ? [purpose] : [], engagement_source: orNull(tab.get(row, 'Engagement Source')), church_id: churchId, church_text: churchId ? null : typedChurch || null,
+      notes: lines(text(tab.get(row, 'Notes')), text(tab.get(row, 'Main Person')) ? `Met with: ${text(tab.get(row, 'Main Person'))}` : ''), data_source: 'Historical Import',
+    });
+    tally.add('visits to add');
+    tally.add(personId ? 'visits linked to a person by email' : 'visits kept by name only (no email)');
+  }
+}
+
+// The form's choices, as the hub's next_step_options know them.
+const NEXT_STEPS = [
+  ['meal', 'I might be able to bring a meal once a month'],
+  ['connect_weekly', 'I could connect weekly with a foster/adoptive parent'],
+  ['start_fam', "I'd be interested in helping start or lead the ministry at my church"],
+  ['give', "I'd like to give financially"],
+  ['foster', "I'd like to learn more about fostering"],
+  ['pray', "I'd love to pray"],
+  ['not_sure', 'Not sure - but put me in touch with someone'],
+  ['already_fam', "I'm already serving through my Family Advocacy Ministry"],
+  ['already_either', "I'm already a foster/adoptive family or I'm already serving through my church"],
+  ['already_family', "I'm already a foster/adoptive family."],
+  ['already_career', "I'm already engaged through my career in child welfare"],
+  ['not_now', 'right season for me to engage'],
+];
+const RESPONSE_COLUMNS = ['Timestamp', 'Email Address', 'First Name', 'Last Name', 'Phone Number', 'Your Home Church'];
+
+function loadResponses(tab, hub, tally) {
+  for (const row of tab.rows) {
+    const first = text(tab.get(row, 'First Name'));
+    const last = text(tab.get(row, 'Last Name'));
+    const mail = email(tab.get(row, 'Email Address'));
+    const stamp = tab.get(row, 'Timestamp');
+    if (!(stamp instanceof Date) || (!first && !mail)) continue;
+    const externalId = `gform:${stamp.toISOString()}:${mail ?? norm(`${first} ${last}`)}`;
+    if (hub.responseIds.has(externalId)) {
+      tally.add('answers already in the hub (skipped)');
+      continue;
+    }
+    hub.responseIds.add(externalId);
+    const ticked = text(tab.getStarting(row, 'You heard that you have a part to play'));
+    const steps = NEXT_STEPS.filter(([, phrase]) => ticked.toLowerCase().includes(phrase.toLowerCase())).map(([key]) => key);
+    if (ticked && !steps.length) tally.add('answers whose next steps were not recognised');
+    const typedChurch = text(tab.get(row, 'Your Home Church'));
+    const noChurch = NO_CHURCH.test(norm(typedChurch));
+    const churchId = hub.church(typedChurch);
+    if (typedChurch && !churchId && !noChurch) hub.noteUnmatched(typedChurch, 'guests');
+    const personId = first ? hub.findPerson(first, last, mail, null) ?? hub.addPerson({ first, last, email: mail, phone: phone(tab.get(row, 'Phone Number')), homeChurchId: churchId, homeChurchText: churchId || noChurch ? '' : typedChurch }) : null;
+    const likely = Number(text(tab.getStarting(row, 'How likely are you to invite')));
+    // The spreadsheet's own "Email Sent" column: anything in it means someone already followed up.
+    const handled = !!text(tab.get(row, 'Email Sent'));
+    hub.out.vce_responses.push({
+      id: randomUUID(), submitted_at: stamp.toISOString(), person_id: personId, first_name: first || null, last_name: last || null, email: mail, phone: phone(tab.get(row, 'Phone Number')),
+      home_church_text: churchId || noChurch ? null : typedChurch || null, church_id: churchId, wall_words: orNull(tab.getStarting(row, 'What word')), feeling: orNull(tab.getStarting(row, 'After the video message')),
+      heard_from: orNull(tab.getStarting(row, 'How did you hear')), next_steps: steps, describes: text(tab.getStarting(row, 'Which of the following describes you')).split(/,\s+/).filter(Boolean),
+      comments: orNull(tab.getStarting(row, 'Anything else')), likely_to_invite: Number.isInteger(likely) && likely >= 1 && likely <= 5 ? likely : null, needs_follow_up: !handled, source: 'Google Form', external_id: externalId,
+    });
+    tally.add('answers to add');
+    tally.add(handled ? 'answers the spreadsheet marks as already followed up (no follow-up made)' : 'answers that will get follow-ups');
+    if (typedChurch && !churchId && !noChurch) tally.add('answers whose church is kept as typed, to confirm');
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Signing in and loading
 // ---------------------------------------------------------------------------
 function ask(question, hidden = false) {
@@ -604,7 +714,7 @@ async function fetchAll(sb, table, columns) {
   }
 }
 
-const EMPTY = { coaches: [], churches: [], church_aliases: [], people: [], person_roles: [], advocate_onboarding: [], families: [], family_members: [] };
+const EMPTY = { coaches: [], churches: [], church_aliases: [], people: [], person_roles: [], advocate_onboarding: [], families: [], family_members: [], visits: [], vce_responses: [] };
 
 async function signInAndRead() {
   const { default: config } = await import('../next.config.mjs');
@@ -624,6 +734,8 @@ async function signInAndRead() {
     advocate_onboarding: await fetchAll(sb, 'advocate_onboarding', 'person_id'),
     families: await fetchAll(sb, 'families', 'id, name, street, zip'),
     family_members: await fetchAll(sb, 'family_members', 'person_id'),
+    visits: await fetchAll(sb, 'visits', 'visit_code'),
+    vce_responses: await fetchAll(sb, 'vce_responses', 'external_id'),
   };
   return { sb, existing };
 }
@@ -637,6 +749,9 @@ async function main() {
   const wantChurchFile = ONLY.includes('churches') || ONLY.includes('advocates');
   if (wantChurchFile && !churchFile) throw new Error('No "Church Spreadsheet….xlsx" in that folder.');
   if (ONLY.includes('families') && !familyFile) throw new Error('No "Family Spreadsheet….xlsx" in that folder.');
+  const visitorFile = findFile(/^ccc_visitors.*\.xlsx$/i);
+  const formFile = findFile(/^my next steps.*\.xlsx$/i);
+  if (ONLY.includes('experience') && (!visitorFile || !formFile)) throw new Error('The Experience load needs "CCC_Visitors….xlsx" and "My Next Steps….xlsx" in that folder.');
 
   const { sb, existing } = LOAD ? await signInAndRead() : { sb: null, existing: EMPTY };
   const hub = new Hub(existing);
@@ -645,6 +760,8 @@ async function main() {
   const churchTab = ONLY.includes('churches') ? await readTab(churchFile, 'Churches', CHURCH_COLUMNS) : null;
   const advocateTab = ONLY.includes('advocates') ? await readTab(churchFile, 'Current Advocates', ADVOCATE_COLUMNS) : null;
   const familyTab = ONLY.includes('families') ? await readTab(familyFile, 'Main Information', FAMILY_COLUMNS) : null;
+  const visitTab = ONLY.includes('experience') ? await readTab(visitorFile, 'VISITS', VISIT_COLUMNS) : null;
+  const formTab = ONLY.includes('experience') ? await readTab(formFile, 'Form Responses 1', RESPONSE_COLUMNS) : null;
 
   // Full coach names from both tabs, so a first name on one row can be read as the person named in full on another.
   const coachNames = [...existing.coaches.map((c) => c.name)];
@@ -665,6 +782,9 @@ async function main() {
   section('Churches', churchTab, (t) => loadChurches(churchTab, hub, fullCoachNames, t));
   section('Advocates', advocateTab, (t) => loadAdvocates(advocateTab, hub, t));
   section('Families', familyTab, (t) => loadFamilies(familyTab, hub, t));
+  // Guests last, so someone who is already a parent, advocate or pastor is recognised and not added twice.
+  section('Center visits', visitTab, (t) => loadVisits(visitTab, hub, t));
+  section('Experience answers', formTab, (t) => loadResponses(formTab, hub, t));
 
   console.log(`\nChurch names: ${hub.loose.size} matched on a near-identical name, ${hub.unmatched.size} kept as typed for C127 to confirm on the Data check page.`);
 

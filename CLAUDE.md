@@ -113,7 +113,8 @@ Next.js 15 (App Router), React 19, TypeScript, Tailwind 3, Supabase
   churches, volunteers, map, experience, care, giving, reports, import, church,
   serve, request-help
 - `app/live/*` – the Live tool's screens: people, families, churches, review
-  (Data check), account (change password), users (admins only). Each of people, families and
+  (Data check), experience (Experience follow-up), account (change password),
+  users (admins only). Each of people, families and
   churches is a list plus a full page per record (`[id]/page.tsx`). Every
   person, family and church named on any page is a link to its page
   (`components/live/links.tsx`). Moving between them uses the browser's own
@@ -215,6 +216,11 @@ The script:
 
 - Reads `../C127 Historic Docs`: the "Churches" and "Current Advocates" tabs
   of the Church Spreadsheet and "Main Information" of the Family Spreadsheet.
+  With `--only experience` (also part of a full run) it reads the "VISITS" tab
+  of `CCC_Visitors*.xlsx` and "Form Responses 1" of `My Next Steps*.xlsx`.
+  Rows that only hold a place in a headcount are skipped. A visitor gets a
+  person record only when there is an email; otherwise the name stays on the
+  visit. An answer the sheet marks "Email Sent" comes in with no follow-up.
 - Loads through `public.import_records()` in one transaction: if any row is
   refused, nothing is written. Only staff and coaches can call it.
 - Matches a typed church name to the church list when it is exact, a saved
@@ -250,6 +256,41 @@ people fix things. Its tabs:
   children, each linking to the family.
 
 "Leave as typed" and "different" answers are rows in `review_dismissals`.
+
+## Experience follow-up
+
+`/live/experience` has three tabs.
+
+- **Follow-ups** – the work queue, as a sortable table or a board by stage
+  (To do, Reached out, Responded, Step taken; Not needed is left off the
+  board). Opening one shows the guest, what they said, and an email and text
+  to copy, written per kind of next step in `lib/live/followup.ts`. Nothing is
+  sent by the hub. "Log it and move this on" writes to the guest's contact log
+  and moves the stage.
+- **Guests' answers** – every "My Next Steps" answer, and a form to add one by
+  hand.
+- **Who follows up** – `next_step_options` as settings: what to do, where it
+  goes, and a named owner. Staff can be added here so a follow-up can be given
+  to them; that does not give them a sign-in.
+
+Follow-ups are made by the database, not the app: a trigger on
+`vce_responses` (`route_vce_response()`) makes one `tasks` row per kind of
+next step ticked. "Church coach" goes to the coach of the guest's church, or
+the FAM queue when there is no matched church or coach. "Named owner" goes to
+the option's owner, or to Development (giving), Family Care (fostering) or
+Belong. "Shared queue" is Belong. Matching a guest's typed church on the Data
+check page moves an open FAM-queue follow-up to that church's coach.
+`tasks.stage` drives the pipeline and keeps `tasks.done` in step.
+
+New answers only arrive by the load or by hand. The form C127 uses today is in
+HubSpot (since mid-October 2026); a public form that writes straight to the
+hub is the next piece, and would need its own access rule for signed-out
+visitors.
+
+Every table in the Live tool sorts by clicking a heading
+(`components/live/sort.tsx`), and anything that moves through stages can be
+shown as a board (`components/live/Board.tsx`): churches by status, follow-ups
+by stage. Dragging a card changes the status or stage.
 
 ## What has been tested
 
@@ -308,12 +349,13 @@ legend shows churches as squares where Mapbox draws circles.
    they can work through the Data check page. When the cleaned family
    spreadsheet arrives, decide how the second load treats what is already
    there.
-2. **Experience follow-up in the Live tool** on `visits`, `vce_responses`,
-   `next_step_options` and `tasks`. Sources: `CCC_Visitors2026.xlsx` and "My
-   Next Steps VCE (Responses).xlsx" (both were in Zane's Downloads; move them
-   into `../C127 Historic Docs`). Responses after 2026-10-14 are in HubSpot.
-   Routing owners in `next_step_options` are blank on purpose and get set in
-   the database, so no staff names live in the repo.
+2. **Load the Experience data** (`node scripts/preload.mjs --only experience
+   --load`), then set the named owners on the "Who follows up" tab. After
+   that, a public "My Next Steps" form that writes to the hub. Background on
+   the sources: `CCC_Visitors2026.xlsx` and "My Next Steps VCE
+   (Responses).xlsx" are in `../C127 Historic Docs`. Answers after 2026-10-14
+   are in HubSpot. Named owners are blank on purpose and are set in the app,
+   so no staff names live in the repo.
 3. **Edit screens** for adults and church people; advocate onboarding.
 4. **Sign-ups stay on for now**, because the Users page relies on them. An
    account with no role sees nothing. To turn them off, move account creation

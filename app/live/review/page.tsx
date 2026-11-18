@@ -29,12 +29,13 @@ interface NameItem {
   home: number;
   serving: number;
   advocates: number;
+  guests: number;
   confidence: Confidence;
   candidates: Church[];
 }
 
 export default function DataCheckPage() {
-  const { families, churches, people, members, roles, children, dismissed } = useLive();
+  const { families, churches, people, members, roles, children, responses, dismissed } = useLive();
   const [tab, setTab] = useState<Tab>('Church names');
   const gone = useMemo(() => new Set(dismissed), [dismissed]);
 
@@ -42,10 +43,10 @@ export default function DataCheckPage() {
   const names = useMemo<NameItem[]>(() => {
     const waiting = new Set(roles.filter((r) => !r.churchId && (r.role === 'Advocate' || r.role === 'Point Person')).map((r) => r.personId));
     const m = new Map<string, NameItem>();
-    const add = (typed: string, field: 'home' | 'serving' | 'advocates') => {
+    const add = (typed: string, field: 'home' | 'serving' | 'advocates' | 'guests') => {
       const key = typed.trim().toLowerCase();
       if (!key || gone.has(`church_name:${key}`)) return;
-      const item = m.get(key) ?? { key, name: typed.trim(), home: 0, serving: 0, advocates: 0, confidence: 'none' as Confidence, candidates: [] };
+      const item = m.get(key) ?? { key, name: typed.trim(), home: 0, serving: 0, advocates: 0, guests: 0, confidence: 'none' as Confidence, candidates: [] };
       item[field] += 1;
       m.set(key, item);
     };
@@ -54,12 +55,13 @@ export default function DataCheckPage() {
       if (!f.servingChurchId && f.servingChurchText) add(f.servingChurchText, 'serving');
     }
     for (const p of people) if (!p.homeChurchId && p.homeChurchText && waiting.has(p.id)) add(p.homeChurchText, 'advocates');
+    for (const r of responses) if (!r.churchId && r.homeChurchText) add(r.homeChurchText, 'guests');
     const order: Record<Confidence, number> = { likely: 0, possible: 1, none: 2 };
     return [...m.values()]
       .map((item) => ({ ...item, ...matchName(item.name, churches) }))
       // Names that hold something up (a serving church, an advocate) come first, then the easy ones.
-      .sort((a, b) => Number(b.serving + b.advocates > 0) - Number(a.serving + a.advocates > 0) || order[a.confidence] - order[b.confidence] || b.home + b.serving + b.advocates - (a.home + a.serving + a.advocates));
-  }, [families, people, roles, churches, gone]);
+      .sort((a, b) => Number(b.serving + b.advocates > 0) - Number(a.serving + a.advocates > 0) || order[a.confidence] - order[b.confidence] || b.home + b.serving + b.advocates + b.guests - (a.home + a.serving + a.advocates + a.guests));
+  }, [families, people, roles, responses, churches, gone]);
 
   // People with the same first and last name.
   const peopleGroups = useMemo(() => {
@@ -228,7 +230,7 @@ function NameRow({ item, churches }: { item: NameItem; churches: Church[] }) {
     setBusy(false);
   };
   const others = churches.filter((c) => !item.candidates.some((x) => x.id === c.id));
-  const uses = [item.serving && `serving church for ${plural(item.serving, 'family', 'families')}`, item.advocates && `church of ${plural(item.advocates, 'advocate')}`, item.home && `home church for ${plural(item.home, 'family', 'families')}`].filter(Boolean).join(' · ');
+  const uses = [item.serving && `serving church for ${plural(item.serving, 'family', 'families')}`, item.advocates && `church of ${plural(item.advocates, 'advocate')}`, item.home && `home church for ${plural(item.home, 'family', 'families')}`, item.guests && `church of ${plural(item.guests, 'Experience guest')}`].filter(Boolean).join(' · ');
   const c = CONFIDENCE[item.confidence];
 
   return (

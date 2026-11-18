@@ -3,7 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { lastContact } from '@/components/live/ContactLog';
+import { Board } from '@/components/live/Board';
 import { ChurchLink } from '@/components/live/links';
+import { SortTh, ViewSwitch, sortRows, type SortState } from '@/components/live/sort';
 import { Badge, Drawer, PageHeader, Panel } from '@/components/ui';
 import { useSticky } from '@/lib/live/sticky';
 import { useLive } from '@/lib/live/store';
@@ -18,11 +20,13 @@ const day = (d: string) => (d ? fmtDateLong(new Date(`${d}T12:00:00`).getTime())
 const overdue = (d: string) => !!d && new Date(`${d}T23:59:59`).getTime() < Date.now();
 
 export default function LiveChurchesPage() {
-  const { churches, staff, families, roles, interactions } = useLive();
+  const { churches, staff, families, roles, interactions, updateChurch } = useLive();
   const router = useRouter();
   const [q, setQ] = useSticky('churches.q', '');
   const [status, setStatus] = useSticky('churches.status', 'All');
   const [coach, setCoach] = useSticky('churches.coach', 'All');
+  const [view, setView] = useSticky<'table' | 'board'>('churches.view', 'table');
+  const [sort, setSort] = useSticky<SortState>('churches.sort', { by: 'church', dir: 1 });
   const [adding, setAdding] = useState(false);
 
   const staffName = useMemo(() => Object.fromEntries(staff.map((s) => [s.id, s.name])), [staff]);
@@ -43,12 +47,22 @@ export default function LiveChurchesPage() {
   }, [interactions]);
 
   const needle = q.trim().toLowerCase();
-  const rows = churches.filter(
+  // The board shows every status as its own column, so the status tiles only narrow the table.
+  const scoped = churches.filter(
     (c) =>
-      (status === 'All' || c.status === status) &&
       (coach === 'All' || (coach === 'none' ? !c.coachId : c.coachId === coach)) &&
       (!needle || c.name.toLowerCase().includes(needle) || c.campus.toLowerCase().includes(needle) || c.city.toLowerCase().includes(needle)),
   );
+  const get: Record<string, (c: (typeof churches)[number]) => string | number | null> = {
+    church: (c) => `${c.name} ${c.campus}`,
+    status: (c) => CHURCH_STATUSES.indexOf(c.status),
+    coach: (c) => (c.coachId ? staffName[c.coachId] : ''),
+    families: (c) => famCount[c.id] || 0,
+    advocates: (c) => advocateCount[c.id] || 0,
+    next: (c) => c.nextContactOn,
+    last: (c) => lastContact(contactBy[c.id] ?? []).reached,
+  };
+  const rows = sortRows(scoped.filter((c) => status === 'All' || c.status === status), get[sort.by] ?? get.church, sort.dir);
 
   return (
     <>
@@ -66,7 +80,7 @@ export default function LiveChurchesPage() {
       </div>
 
       <Panel>
-        <div className="grid gap-3 border-b border-line p-4 sm:grid-cols-2">
+        <div className="grid items-end gap-3 border-b border-line p-4 sm:grid-cols-[1fr_1fr_auto]">
           <div>
             <label htmlFor="lc-q" className="label">Search</label>
             <input id="lc-q" className="field" placeholder="Church, campus or city" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -79,11 +93,40 @@ export default function LiveChurchesPage() {
               <option value="none">No coach yet</option>
             </select>
           </div>
+          <ViewSwitch view={view} onChange={setView} />
         </div>
+        {view === 'board' ? (
+          <div className="p-4">
+            <p className="mb-3 text-xs text-ink-soft">Drag a church to another column to change its status, or click its name to open it.</p>
+            <Board
+              columns={CHURCH_STATUSES}
+              items={sortRows(scoped, (c) => `${c.name} ${c.campus}`, 1)}
+              columnOf={(c) => c.status}
+              idOf={(c) => c.id}
+              onMove={(c, to) => updateChurch(c.id, { status: to as ChurchStatus })}
+              tone={(col) => { const t = statusTone(col as ChurchStatus); return t === 'good' ? 'bg-good' : t === 'brand' ? 'bg-brand' : t === 'warn' ? 'bg-warn' : t === 'alert' ? 'bg-alert' : 'bg-ink-faint'; }}
+              card={(c) => (
+                <>
+                  <div><ChurchLink id={c.id}>{c.name}</ChurchLink>{c.campus && <span className="text-ink-soft"> · {c.campus}</span>}</div>
+                  <div className="mt-0.5 truncate text-xs text-ink-soft">{[c.city, c.coachId ? staffName[c.coachId] : 'No coach yet'].filter(Boolean).join(' · ')}</div>
+                  {(famCount[c.id] || advocateCount[c.id]) && <div className="num mt-0.5 text-xs text-ink-soft">{famCount[c.id] ? `${famCount[c.id]} families` : ''}{famCount[c.id] && advocateCount[c.id] ? ' · ' : ''}{advocateCount[c.id] ? `${advocateCount[c.id]} advocates` : ''}</div>}
+                </>
+              )}
+            />
+          </div>
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="border-b border-line bg-paper">
-              <tr><th className="th">Church</th><th className="th">Status</th><th className="th">FAM coach</th><th className="th text-right">Families</th><th className="th text-right">Advocates</th><th className="th">Next contact</th><th className="th">Last connected</th></tr>
+              <tr>
+                <SortTh col="church" label="Church" sort={sort} onSort={setSort} />
+                <SortTh col="status" label="Status" sort={sort} onSort={setSort} />
+                <SortTh col="coach" label="FAM coach" sort={sort} onSort={setSort} />
+                <SortTh col="families" label="Families" sort={sort} onSort={setSort} right />
+                <SortTh col="advocates" label="Advocates" sort={sort} onSort={setSort} right />
+                <SortTh col="next" label="Next contact" sort={sort} onSort={setSort} />
+                <SortTh col="last" label="Last connected" sort={sort} onSort={setSort} />
+              </tr>
             </thead>
             <tbody>
               {rows.map((c) => {
@@ -109,7 +152,8 @@ export default function LiveChurchesPage() {
             </tbody>
           </table>
         </div>
-        <div className="border-t border-line px-4 py-2 text-xs text-ink-soft"><span className="num font-semibold text-ink">{num(rows.length)}</span> {rows.length === 1 ? 'church' : 'churches'}</div>
+        )}
+        <div className="border-t border-line px-4 py-2 text-xs text-ink-soft"><span className="num font-semibold text-ink">{num(view === 'board' ? scoped.length : rows.length)}</span> {(view === 'board' ? scoped.length : rows.length) === 1 ? 'church' : 'churches'}</div>
       </Panel>
 
       <Drawer open={adding} onClose={() => setAdding(false)} title="Add a church">

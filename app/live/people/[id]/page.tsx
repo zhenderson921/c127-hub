@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { ContactLog } from '@/components/live/ContactLog';
@@ -19,14 +20,19 @@ export default function PersonPage() {
 }
 
 function PersonRecord({ p }: { p: Person }) {
-  const { churches, families, people, members, roles, interactions, updatePerson } = useLive();
+  const { churches, families, people, members, roles, interactions, responses, visits, followUps, nextSteps, updatePerson } = useLive();
   const [form, setForm] = useState({ firstName: p.firstName, lastName: p.lastName, email: p.email, phone: p.phone, street: p.street, city: p.city, state: p.state, zip: p.zip, county: p.county, notes: p.notes });
   const churchById = new Map(churches.map((c) => [c.id, c]));
   const myFamilies = members.filter((m) => m.personId === p.id).map((m) => ({ m, f: families.find((f) => f.id === m.familyId) }));
   const myRoles = roles.filter((r) => r.personId === p.id);
   const log = interactions.filter((i) => i.personId === p.id);
   const home = p.homeChurchId ? churchById.get(p.homeChurchId) : undefined;
-  const tags = [...new Set([...(myFamilies.length ? ['Family adult'] : []), ...myRoles.map((r) => r.role)])];
+  const myResponses = responses.filter((r) => r.personId === p.id);
+  const myVisits = visits.filter((v) => v.personId === p.id);
+  const myFollowUps = followUps.filter((f) => f.personId === p.id);
+  const trackOf = new Map(nextSteps.map((n) => [n.key, n.track]));
+  const dayOf = (iso: string) => new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const tags = [...new Set([...(myFamilies.length ? ['Family adult'] : []), ...myRoles.map((r) => r.role), ...(myResponses.length || myVisits.length ? ['Experience guest'] : [])])];
 
   // Each field saves when you click away from it, and only if it changed.
   const field = (k: keyof typeof form, label: string, extra: { type?: string; span?: string } = {}) => (
@@ -53,7 +59,7 @@ function PersonRecord({ p }: { p: Person }) {
         <div className="text-xs font-semibold uppercase tracking-widest text-ink-soft">Person</div>
         <h1 className="font-display text-4xl leading-none tracking-wide text-ink">{personName(p)}</h1>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          {tags.length ? tags.map((t) => <Badge key={t} tone={t === 'Family adult' ? 'brand' : t === 'Advocate' || t === 'Point Person' ? 'good' : 'warn'}>{t}</Badge>) : <Badge>No tag yet</Badge>}
+          {tags.length ? tags.map((t) => <Badge key={t} tone={t === 'Experience guest' ? 'gray' : t === 'Family adult' ? 'brand' : t === 'Advocate' || t === 'Point Person' ? 'good' : 'warn'}>{t}</Badge>) : <Badge>No tag yet</Badge>}
           {p.phone && <a className="btn-ghost py-1" href={`tel:${p.phone}`}>Call {p.phone}</a>}
           {p.email && <a className="btn-ghost py-1" href={`mailto:${p.email}`}>Email</a>}
         </div>
@@ -89,6 +95,27 @@ function PersonRecord({ p }: { p: Person }) {
               {home && <li className="px-4 py-3 text-sm">Attends <ChurchLink id={home.id}>{churchLabel(home)}</ChurchLink></li>}
             </ul>
           </Panel>
+
+          {(myResponses.length > 0 || myVisits.length > 0) && (
+            <Panel title="The Experience" action={<Link className="text-xs font-semibold text-brand-dark underline" href="/live/experience">Open follow-ups</Link>}>
+              <ul className="divide-y divide-line">
+                {myResponses.map((r) => (
+                  <li key={r.id} className="px-4 py-3 text-sm">
+                    <div>Answered &ldquo;My Next Steps&rdquo; on {dayOf(r.submittedAt)}</div>
+                    <div className="mt-1 flex flex-wrap gap-1">{[...new Set(r.nextSteps.map((k) => trackOf.get(k)).filter(Boolean))].map((t) => <Badge key={t} tone="brand">{t}</Badge>)}</div>
+                    {r.comments && <p className="mt-1 text-ink-soft">{r.comments}</p>}
+                  </li>
+                ))}
+                {myFollowUps.map((f) => (
+                  <li key={f.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+                    <span>Follow-up: {f.title}</span>
+                    <Badge tone={f.stage === 'To do' ? 'warn' : f.stage === 'Step taken' ? 'good' : 'gray'}>{f.stage}</Badge>
+                  </li>
+                ))}
+                {myVisits.length > 0 && <li className="px-4 py-2.5 text-sm text-ink-soft">Visited the Center {myVisits.length === 1 ? `on ${dayOf(myVisits[0].visitedOn)}` : `${myVisits.length} times, most recently ${dayOf(myVisits.map((v) => v.visitedOn).sort().reverse()[0])}`}</li>}
+              </ul>
+            </Panel>
+          )}
 
           <Panel title="Details">
             <div className="grid grid-cols-6 gap-2 p-4">

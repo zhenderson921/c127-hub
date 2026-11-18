@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { all } from '../db';
-import type { CareCommunity, Child, Church, Family, FamilyMember, Interaction, LiveData, Person, PersonRole, Staff } from './types';
+import type { CareCommunity, Child, Church, Family, FamilyMember, FollowUp, Interaction, LiveData, NextStep, Person, PersonRole, Response, Staff, Visit } from './types';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export const toStaff = (r: any): Staff => ({ id: r.id, name: r.name, team: r.team ?? '' });
@@ -33,6 +33,20 @@ export const toCareCommunity = (r: any): CareCommunity => ({ id: r.id, familyId:
 export const toInteraction = (r: any): Interaction => ({
   id: r.id, at: r.at, method: r.method, reached: r.reached, summary: r.summary ?? '', familyId: r.family_id, personId: r.person_id, churchId: r.church_id, loggedBy: r.logged_by,
 });
+export const toNextStep = (r: any): NextStep => ({ key: r.key, label: r.label, track: r.track, action: r.action ?? '', route: r.route, ownerId: r.owner_id, sort: r.sort, active: r.active });
+
+export const toResponse = (r: any): Response => ({
+  id: r.id, submittedAt: r.submitted_at, personId: r.person_id, firstName: r.first_name ?? '', lastName: r.last_name ?? '', email: r.email ?? '', phone: r.phone ?? '',
+  homeChurchText: r.home_church_text ?? '', churchId: r.church_id, wallWords: r.wall_words ?? '', feeling: r.feeling ?? '', heardFrom: r.heard_from ?? '',
+  nextSteps: r.next_steps ?? [], describes: r.describes ?? [], comments: r.comments ?? '', likelyToInvite: r.likely_to_invite, source: r.source,
+});
+
+export const toFollowUp = (r: any): FollowUp => ({
+  id: r.id, stage: r.stage, staffId: r.coach_id, queue: r.queue, title: r.title, about: r.about ?? '', dueOn: r.due_on, personId: r.person_id, churchId: r.church_id,
+  responseId: r.response_id, nextStepKey: r.next_step_key, outcome: r.outcome ?? '',
+});
+
+export const toVisit = (r: any): Visit => ({ id: r.id, visitedOn: r.visited_on, personId: r.person_id, name: r.group_name ?? '', visitType: r.visit_type });
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 const orNull = (v: string | null | undefined) => (v && v.trim() ? v.trim() : null);
@@ -103,9 +117,10 @@ export function churchColumns(p: Partial<Church>): Record<string, unknown> {
 /** Read everything the Live tool shows. Row level security decides what comes back. */
 export async function loadLive(sb: SupabaseClient): Promise<LiveData> {
   /* eslint-disable @typescript-eslint/no-explicit-any */
-  const [staff, churches, people, roles, families, members, children, ccs, interactions, dismissals, profiles] = await Promise.all([
+  const [staff, churches, people, roles, families, members, children, ccs, interactions, dismissals, nextSteps, responses, tasks, visits, profiles] = await Promise.all([
     all<any>(sb, 'coaches'), all<any>(sb, 'churches'), all<any>(sb, 'people'), all<any>(sb, 'person_roles'), all<any>(sb, 'families'),
     all<any>(sb, 'family_members'), all<any>(sb, 'children'), all<any>(sb, 'care_communities'), all<any>(sb, 'interactions', 'at'), all<any>(sb, 'review_dismissals', 'decided_at'),
+    all<any>(sb, 'next_step_options', 'sort'), all<any>(sb, 'vce_responses', 'submitted_at'), all<any>(sb, 'tasks', 'due_on'), all<any>(sb, 'visits', 'visited_on'),
     sb.from('profiles').select('id, full_name'),
   ]);
   /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -121,6 +136,10 @@ export async function loadLive(sb: SupabaseClient): Promise<LiveData> {
     children: children.map(toChild),
     careCommunities: ccs.map(toCareCommunity),
     interactions: interactions.map(toInteraction),
+    nextSteps: nextSteps.map(toNextStep).sort((a, b) => a.sort - b.sort),
+    responses: responses.map(toResponse),
+    followUps: tasks.filter((t) => t.kind === 'Experience follow-up').map(toFollowUp),
+    visits: visits.map(toVisit),
     userNames,
     dismissed: dismissals.map((d) => `${d.kind}:${d.key}`),
   };

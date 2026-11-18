@@ -154,6 +154,73 @@ export interface Interaction {
   loggedBy: string | null;
 }
 
+export const STAGES = ['To do', 'Reached out', 'Responded', 'Step taken', 'Not needed'] as const;
+export type Stage = (typeof STAGES)[number];
+export const QUEUES = ['Belong', 'FAM', 'Family Care', 'Development'] as const;
+export type Queue = (typeof QUEUES)[number];
+export const TRACKS = ['Serve', 'Start a FAM', 'Give', 'Foster', 'Pray', 'Talk to someone', 'Already involved', 'No follow-up'] as const;
+export type Track = (typeof TRACKS)[number];
+export const ROUTES = ['Shared queue', 'Church coach', 'Named owner', 'None'] as const;
+export type Route = (typeof ROUTES)[number];
+
+/** One thing a guest can tick on the "My Next Steps" form, and what C127 does about it. */
+export interface NextStep {
+  key: string;
+  label: string;
+  track: Track;
+  action: string;
+  route: Route;
+  ownerId: string | null;
+  sort: number;
+  active: boolean;
+}
+
+/** A guest's answers to the form after walking through the Experience. */
+export interface Response {
+  id: string;
+  submittedAt: string;
+  personId: string | null;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  homeChurchText: string;
+  churchId: string | null;
+  wallWords: string;
+  feeling: string;
+  heardFrom: string;
+  nextSteps: string[];
+  describes: string[];
+  comments: string;
+  likelyToInvite: number | null;
+  source: string;
+}
+
+/** Something to do for a guest: one per kind of next step they ticked. */
+export interface FollowUp {
+  id: string;
+  stage: Stage;
+  /** The staff member it belongs to, or null when it sits in a shared queue. */
+  staffId: string | null;
+  queue: Queue | null;
+  title: string;
+  about: string;
+  dueOn: string;
+  personId: string | null;
+  churchId: string | null;
+  responseId: string | null;
+  nextStepKey: string | null;
+  outcome: string;
+}
+
+export interface Visit {
+  id: string;
+  visitedOn: string;
+  personId: string | null;
+  name: string;
+  visitType: string;
+}
+
 export interface LiveData {
   staff: Staff[];
   churches: Church[];
@@ -165,12 +232,16 @@ export interface LiveData {
   careCommunities: CareCommunity[];
   interactions: Interaction[];
   /** Names of the people who can sign in, for "logged by". Only staff can read these. */
+  nextSteps: NextStep[];
+  responses: Response[];
+  followUps: FollowUp[];
+  visits: Visit[];
   userNames: Record<string, string>;
   /** Data check items someone has looked at and left as they are, as "kind:key". */
   dismissed: string[];
 }
 
-export const EMPTY: LiveData = { staff: [], churches: [], people: [], roles: [], families: [], members: [], children: [], careCommunities: [], interactions: [], userNames: {}, dismissed: [] };
+export const EMPTY: LiveData = { staff: [], churches: [], people: [], roles: [], families: [], members: [], children: [], careCommunities: [], interactions: [], nextSteps: [], responses: [], followUps: [], visits: [], userNames: {}, dismissed: [] };
 
 /** Age and age band worked out from the year of birth, so they never go stale. */
 export function ageBand(birthYear: number | null, year = new Date().getFullYear()): { age: number | null; band: string } {
@@ -191,5 +262,16 @@ export function careLabel(f: Family, ccs: CareCommunity[]): string {
   if (mine.some((c) => c.status === 'Paused')) return 'Care Community paused';
   return f.careStatus;
 }
+
+/**
+ * A child's age band. From the year of birth when there is one; otherwise the
+ * band the spreadsheet listed, which may be out of date.
+ */
+export function childBand(c: Child): string {
+  if (c.birthYear) return ageBand(c.birthYear).band;
+  const listed = c.notes.match(/Listed as ([A-Za-z/]+)/);
+  return listed ? listed[1] : 'Unknown';
+}
+export const AGE_BANDS = ['Preschool', 'Elementary', 'Middle', 'Middle/High', 'Teen', 'Adult', 'Unknown'];
 
 export const personName = (p: Person | undefined): string => (p ? `${p.firstName} ${p.lastName}`.trim() : '');
