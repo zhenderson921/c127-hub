@@ -175,7 +175,7 @@ export default function LiveFamiliesPage() {
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="border-y border-line bg-paper">
-              <tr><th className="th">Family</th><th className="th">Home type</th><th className="th">City</th><th className="th text-right">Children</th><th className="th">Care</th><th className="th">Serving church</th><th className="th">Last connected</th></tr>
+              <tr><th className="th">Family</th><th className="th">Home type</th><th className="th">City</th><th className="th text-right">Children</th><th className="th">Care</th><th className="th">Home church</th><th className="th">Serving church</th><th className="th">Last connected</th></tr>
             </thead>
             <tbody>
               {shown.map((f) => {
@@ -191,13 +191,14 @@ export default function LiveFamiliesPage() {
                     <td className="td">{f.city}</td>
                     <td className="td num text-right">{kidCount[f.id] || '–'}</td>
                     <td className="td"><Badge tone={careTone(labels[f.id])}>{labels[f.id]}</Badge></td>
+                    <td className="td">{f.homeChurchId ? churchById[f.homeChurchId]?.name : f.homeChurchText ? <span className="text-ink-soft" title="As typed in the spreadsheet. Confirm which church it is on the Data check page.">&ldquo;{f.homeChurchText}&rdquo;</span> : <span className="text-ink-faint">–</span>}</td>
                     <td className="td">{f.servingChurchId ? churchById[f.servingChurchId]?.name : f.servingChurchText ? <span className="text-warn" title="As typed in the spreadsheet. Confirm which church it is on the Data check page.">&ldquo;{f.servingChurchText}&rdquo; to confirm</span> : <span className="text-ink-faint">None yet</span>}</td>
                     <td className={`td ${stale ? 'font-semibold text-warn' : 'text-ink-soft'}`}>{lc.reached ? ago(lc.reached) : 'Never'}</td>
                   </tr>
                 );
               })}
               {shown.length === 0 && (
-                <tr><td colSpan={7} className="td py-10 text-center text-ink-soft">
+                <tr><td colSpan={8} className="td py-10 text-center text-ink-soft">
                   {families.length === 0 ? 'No families yet. Add the first one, or import the family spreadsheet when the importer is ready.' : 'No families match those filters.'}
                 </td></tr>
               )}

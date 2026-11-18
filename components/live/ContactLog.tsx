@@ -13,7 +13,7 @@ const NOT_REACHED: Method[] = ['Voicemail'];
  * The one contact log. A contact is typed once here and shows on the family or
  * church it is about, in place of the monthly spreadsheet columns.
  */
-export function ContactLog({ about, entries }: { about: { familyId?: string; churchId?: string }; entries: Interaction[] }) {
+export function ContactLog({ about, entries }: { about: { familyId?: string; churchId?: string; personId?: string }; entries: Interaction[] }) {
   const { logContact, userNames } = useLive();
   const [method, setMethod] = useState<Method>('Call');
   const [reached, setReached] = useState(true);

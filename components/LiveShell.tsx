@@ -8,6 +8,7 @@ const NAV: NavGroup[] = [
   {
     group: 'People',
     items: [
+      { href: '/live/people', label: 'People' },
       { href: '/live/families', label: 'Families' },
       { href: '/live/churches', label: 'Churches' },
     ],

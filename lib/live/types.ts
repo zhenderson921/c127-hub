@@ -69,7 +69,11 @@ export interface Person {
   email: string;
   phone: string;
   street: string;
+  city: string;
+  state: string;
   zip: string;
+  county: string;
+  notes: string;
   homeChurchId: string | null;
   /** Their church as typed, while it is not matched to a church in the list. */
   homeChurchText: string;

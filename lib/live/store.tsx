@@ -4,8 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadProfile, type Profile } from '../db';
 import { supabaseBrowser } from '../supabase';
-import { churchColumns, familyColumns, loadLive, toCareCommunity, toChild, toChurch, toFamily, toInteraction, toMember, toPerson, toRole, toStaff } from './db';
-import { EMPTY, type CareCommunity, type Child, type Church, type ChurchRole, type Family, type LiveData, type MemberRelationship, type Method } from './types';
+import { churchColumns, familyColumns, loadLive, personColumns, toCareCommunity, toChild, toChurch, toFamily, toInteraction, toMember, toPerson, toRole, toStaff } from './db';
+import { EMPTY, type CareCommunity, type Child, type Church, type ChurchRole, type Family, type LiveData, type MemberRelationship, type Method, type Person } from './types';
 
 export interface NewAdult {
   firstName: string;
@@ -29,6 +29,7 @@ export interface NewChurch extends Partial<Church> {
 export interface NewContact {
   familyId?: string;
   churchId?: string;
+  personId?: string;
   method: Method;
   reached: boolean;
   summary: string;
@@ -48,6 +49,7 @@ interface LiveStore extends LiveData {
   addChurchPerson: (churchId: string, p: { firstName: string; lastName: string; email: string; phone: string; role: ChurchRole; title: string }) => Promise<boolean>;
   addFamily: (f: NewFamily) => Promise<string | null>;
   updateFamily: (id: string, patch: Partial<Family>) => Promise<boolean>;
+  updatePerson: (id: string, patch: Partial<Person>) => Promise<boolean>;
   addChild: (c: Omit<Child, 'id' | 'inHome' | 'notes'>) => Promise<boolean>;
   removeChild: (id: string) => Promise<boolean>;
   startCareCommunity: (familyId: string) => Promise<boolean>;
@@ -234,6 +236,14 @@ export function LiveProvider({ children }: { children: React.ReactNode }) {
         return true;
       },
 
+      updatePerson: async (id, patch) => {
+        const row = await save('That change', (sb) => patchRow(sb, 'people', id, personColumns(patch)));
+        if (!row) return false;
+        const saved = changed(toPerson(row), patch);
+        setData((d) => ({ ...d, people: d.people.map((p) => (p.id === id ? { ...p, ...saved } : p)) }));
+        return true;
+      },
+
       addChild: async (c) => {
         const row = await save('That child', (sb) => insert(sb, 'children', { family_id: c.familyId, first_name: orNull(c.firstName), birth_year: c.birthYear, relationship: c.relationship }));
         if (!row) return false;
@@ -328,7 +338,7 @@ export function LiveProvider({ children }: { children: React.ReactNode }) {
       logContact: async (c) => {
         const row = await save('That contact', (sb) =>
           insert(sb, 'interactions', {
-            method: c.method, reached: c.reached, summary: orNull(c.summary), family_id: c.familyId ?? null, church_id: c.churchId ?? null,
+            method: c.method, reached: c.reached, summary: orNull(c.summary), family_id: c.familyId ?? null, church_id: c.churchId ?? null, person_id: c.personId ?? null,
             staff_id: profile?.coachId ?? null, source: 'Hub',
           }),
         );

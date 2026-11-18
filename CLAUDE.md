@@ -106,7 +106,8 @@ Next.js 15 (App Router), React 19, TypeScript, Tailwind 3, Supabase
 - `app/(hub)/*` – the Prototype's screens: dashboard, my-work, families,
   churches, volunteers, map, experience, care, giving, reports, import, church,
   serve, request-help
-- `app/live/*` – the Live tool's screens: families, churches, review (Data check)
+- `app/live/*` – the Live tool's screens: people, families, churches, review
+  (Data check)
 - `components/ShellFrame.tsx` – the frame both views share, with the view
   switch; `Shell.tsx` is the Prototype's nav, `LiveShell.tsx` the Live tool's
 - `components/live/ContactLog.tsx` – the contact log used on live screens
@@ -177,8 +178,8 @@ To give someone access: add them under Authentication in the Supabase
 dashboard, then insert a `profiles` row with their role (and `church_id` for an
 advocate). Zane has a `staff` account (2026-11-18).
 
-The database holds **no records yet**: one user, the 12 seeded next-step
-options, and nothing else.
+The database holds C127's real records since the preload on 2026-11-18: 247
+churches, 703 families, 1,413 people, 2,113 children, 253 Care Communities.
 
 ## Loading the spreadsheets, and the Data check page
 
@@ -267,9 +268,11 @@ importer.
 Live tool:
 
 - No import screen. Records come from the preload script or are added by hand.
-- An adult's name, phone and email cannot be edited after the family is added,
-  and an adult cannot be added to an existing family. Same for people at a
-  church. Advocate onboarding dates have a table but no screen.
+- People are edited on the People screen (`/live/people`), which also has the
+  combinable filters: tag or role, church, home type, county, city, contact
+  details. A person cannot yet be added on their own, added to an existing
+  family, or given a new role; advocate onboarding dates have a table but no
+  screen.
 - No map or closest-church matching: nothing sets latitude and longitude yet.
 - Every table is loaded into the browser at once. Fine for C127's size; the
   contact log is the first thing to page if Promise Serves history is loaded.

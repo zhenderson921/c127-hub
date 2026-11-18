@@ -11,7 +11,8 @@ export const toChurch = (r: any): Church => ({
   famStartedOn: r.launched_on ?? '', agreementSignedOn: r.agreement_signed_on ?? '', nextStep: r.next_step ?? '', nextContactOn: r.next_contact_on ?? '', notes: r.notes ?? '',
 });
 
-export const toPerson = (r: any): Person => ({ id: r.id, firstName: r.first_name, lastName: r.last_name ?? '', email: r.email ?? '', phone: r.phone ?? '', street: r.street ?? '', zip: r.zip ?? '', homeChurchId: r.home_church_id, homeChurchText: r.home_church_text ?? '',
+export const toPerson = (r: any): Person => ({ id: r.id, firstName: r.first_name, lastName: r.last_name ?? '', email: r.email ?? '', phone: r.phone ?? '', street: r.street ?? '', city: r.city ?? '', state: r.state ?? '', zip: r.zip ?? '', county: r.county ?? '', notes: r.notes ?? '',
+  homeChurchId: r.home_church_id, homeChurchText: r.home_church_text ?? '',
 });
 
 export const toRole = (r: any): PersonRole => ({ id: r.id, personId: r.person_id, role: r.role, churchId: r.church_id, title: r.title ?? '', status: r.status });
@@ -57,6 +58,23 @@ export function familyColumns(p: Partial<Family>): Record<string, unknown> {
   if (p.prayerRequest !== undefined) c.prayer_request = orNull(p.prayerRequest);
   if (p.nextContactOn !== undefined) c.next_contact_on = orNull(p.nextContactOn);
   if (p.notes !== undefined) c.notes = orNull(p.notes);
+  return c;
+}
+
+export function personColumns(p: Partial<Person>): Record<string, unknown> {
+  const c: Record<string, unknown> = {};
+  if (p.firstName !== undefined) c.first_name = p.firstName.trim();
+  if (p.lastName !== undefined) c.last_name = orNull(p.lastName);
+  if (p.email !== undefined) c.email = orNull(p.email);
+  if (p.phone !== undefined) c.phone = orNull(p.phone);
+  if (p.street !== undefined) c.street = orNull(p.street);
+  if (p.city !== undefined) c.city = orNull(p.city);
+  if (p.state !== undefined) c.state = orNull(p.state);
+  if (p.zip !== undefined) c.zip = orNull(p.zip);
+  if (p.county !== undefined) c.county = orNull(p.county);
+  if (p.notes !== undefined) c.notes = orNull(p.notes);
+  if (p.homeChurchId !== undefined) c.home_church_id = p.homeChurchId;
+  if (p.homeChurchText !== undefined) c.home_church_text = orNull(p.homeChurchText);
   return c;
 }
 
