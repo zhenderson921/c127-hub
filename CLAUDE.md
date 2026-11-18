@@ -114,7 +114,7 @@ Next.js 15 (App Router), React 19, TypeScript, Tailwind 3, Supabase
   serve, request-help
 - `app/live/*` – the Live tool's screens: people, families, churches, review
   (Data check), experience (Experience follow-up), account (change password),
-  users (admins only). Each of people, families and
+  users (admins only), feedback (the builder only). Each of people, families and
   churches is a list plus a full page per record (`[id]/page.tsx`). Every
   person, family and church named on any page is a link to its page
   (`components/live/links.tsx`). Moving between them uses the browser's own
@@ -295,6 +295,18 @@ Every table in the Live tool sorts by clicking a heading
 (`components/live/sort.tsx`), and anything that moves through stages can be
 shown as a board (`components/live/Board.tsx`): churches by status, follow-ups
 by stage. Dragging a card changes the status or stage.
+
+## Feedback
+
+A floating Feedback button sits in the bottom corner of every Live tool page
+(`components/live/FeedbackButton.tsx`). Anyone on the team can send an idea, a
+problem or a question; it is saved with who sent it, the page they were on and
+what it was showing, and their screen size. `/live/feedback` lists it all with
+a status (New, In progress, Done, Not doing) and a private note, and the
+sidebar shows how many are still outstanding. Only the builder sees that page
+and that number: `profiles.is_builder`, set for Zane, and the `feedback`
+table's access rules send the rows to nobody else. The sender never sees the
+note or the status.
 
 ## What has been tested
 

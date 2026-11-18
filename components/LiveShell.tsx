@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import { FeedbackButton } from '@/components/live/FeedbackButton';
 import { ShellFrame, type NavGroup } from '@/components/ShellFrame';
+import { isOutstanding } from '@/lib/live/types';
 import { useLive } from '@/lib/live/store';
 
 // Screens are added here one at a time as each piece moves onto real data.
@@ -20,7 +22,7 @@ const NAV: NavGroup[] = [
 
 /** The Live tool: C127's real records, built piece by piece. */
 export function LiveShell({ children }: { children: React.ReactNode }) {
-  const { profile, ready, error, clearError, signOut } = useLive();
+  const { profile, ready, error, clearError, signOut, feedback } = useLive();
   const team = profile?.role === 'staff' || profile?.role === 'coach';
 
   let body: React.ReactNode = children;
@@ -42,7 +44,23 @@ export function LiveShell({ children }: { children: React.ReactNode }) {
   return (
     <ShellFrame
       view="live"
-      groups={team ? (profile?.isAdmin ? [...NAV, { group: 'Admin', items: [{ href: '/live/users', label: 'Users' }] }] : NAV) : []}
+      groups={
+        team
+          ? [
+              ...NAV,
+              ...(profile?.isAdmin || profile?.isBuilder
+                ? [{
+                    group: 'Admin',
+                    items: [
+                      ...(profile.isAdmin ? [{ href: '/live/users', label: 'Users' }] : []),
+                      // The number is how much feedback is still waiting to be dealt with.
+                      ...(profile.isBuilder ? [{ href: '/live/feedback', label: 'Feedback', badge: feedback.filter(isOutstanding).length }] : []),
+                    ],
+                  }]
+                : []),
+            ]
+          : []
+      }
       error={error}
       clearError={clearError}
       footer={
@@ -55,6 +73,7 @@ export function LiveShell({ children }: { children: React.ReactNode }) {
       }
     >
       {body}
+      {ready && team && <FeedbackButton />}
     </ShellFrame>
   );
 }

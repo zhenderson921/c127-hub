@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { all } from '../db';
-import type { CareCommunity, Child, Church, Family, FamilyMember, FollowUp, Interaction, LiveData, NextStep, Person, PersonRole, Response, Staff, Visit } from './types';
+import type { CareCommunity, Child, Church, Family, FamilyMember, Feedback, FollowUp, Interaction, LiveData, NextStep, Person, PersonRole, Response, Staff, Visit } from './types';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export const toStaff = (r: any): Staff => ({ id: r.id, name: r.name, team: r.team ?? '' });
@@ -44,6 +44,11 @@ export const toResponse = (r: any): Response => ({
 export const toFollowUp = (r: any): FollowUp => ({
   id: r.id, stage: r.stage, staffId: r.coach_id, queue: r.queue, title: r.title, about: r.about ?? '', dueOn: r.due_on, personId: r.person_id, churchId: r.church_id,
   responseId: r.response_id, nextStepKey: r.next_step_key, outcome: r.outcome ?? '',
+});
+
+export const toFeedback = (r: any): Feedback => ({
+  id: r.id, createdAt: r.created_at, authorName: r.author_name ?? '', authorEmail: r.author_email ?? '', kind: r.kind, message: r.message, pagePath: r.page_path ?? '',
+  pageLabel: r.page_label ?? '', screen: r.screen ?? '', status: r.status, builderNote: r.builder_note ?? '', resolvedAt: r.resolved_at ?? '',
 });
 
 export const toVisit = (r: any): Visit => ({ id: r.id, visitedOn: r.visited_on, personId: r.person_id, name: r.group_name ?? '', visitType: r.visit_type });
@@ -117,10 +122,10 @@ export function churchColumns(p: Partial<Church>): Record<string, unknown> {
 /** Read everything the Live tool shows. Row level security decides what comes back. */
 export async function loadLive(sb: SupabaseClient): Promise<LiveData> {
   /* eslint-disable @typescript-eslint/no-explicit-any */
-  const [staff, churches, people, roles, families, members, children, ccs, interactions, dismissals, nextSteps, responses, tasks, visits, profiles] = await Promise.all([
+  const [staff, churches, people, roles, families, members, children, ccs, interactions, dismissals, nextSteps, responses, tasks, visits, feedback, profiles] = await Promise.all([
     all<any>(sb, 'coaches'), all<any>(sb, 'churches'), all<any>(sb, 'people'), all<any>(sb, 'person_roles'), all<any>(sb, 'families'),
     all<any>(sb, 'family_members'), all<any>(sb, 'children'), all<any>(sb, 'care_communities'), all<any>(sb, 'interactions', 'at'), all<any>(sb, 'review_dismissals', 'decided_at'),
-    all<any>(sb, 'next_step_options', 'sort'), all<any>(sb, 'vce_responses', 'submitted_at'), all<any>(sb, 'tasks', 'due_on'), all<any>(sb, 'visits', 'visited_on'),
+    all<any>(sb, 'next_step_options', 'sort'), all<any>(sb, 'vce_responses', 'submitted_at'), all<any>(sb, 'tasks', 'due_on'), all<any>(sb, 'visits', 'visited_on'), all<any>(sb, 'feedback'),
     sb.from('profiles').select('id, full_name'),
   ]);
   /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -140,6 +145,7 @@ export async function loadLive(sb: SupabaseClient): Promise<LiveData> {
     responses: responses.map(toResponse),
     followUps: tasks.filter((t) => t.kind === 'Experience follow-up').map(toFollowUp),
     visits: visits.map(toVisit),
+    feedback: feedback.map(toFeedback),
     userNames,
     dismissed: dismissals.map((d) => `${d.kind}:${d.key}`),
   };

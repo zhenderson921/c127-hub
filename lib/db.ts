@@ -10,6 +10,8 @@ export interface Profile {
   churchId: string | null;
   /** Can add people to the hub and change their access. */
   isAdmin: boolean;
+  /** Sees the Feedback page. */
+  isBuilder: boolean;
 }
 
 // Dates are stored as calendar days; the app works in milliseconds at local noon.
@@ -76,8 +78,8 @@ export async function loadProfile(sb: SupabaseClient): Promise<Profile | null> {
   if (!auth.user) return null;
   const { data } = await sb.from('profiles').select('*').eq('id', auth.user.id).maybeSingle();
   // Signed in, but nobody has given this account a role yet: they can see nothing.
-  if (!data) return { id: auth.user.id, email: auth.user.email ?? '', fullName: '', role: 'none', coachId: null, churchId: null, isAdmin: false };
-  return { id: data.id, email: auth.user.email ?? '', fullName: data.full_name ?? '', role: data.role, coachId: data.coach_id, churchId: data.church_id, isAdmin: !!data.is_admin };
+  if (!data) return { id: auth.user.id, email: auth.user.email ?? '', fullName: '', role: 'none', coachId: null, churchId: null, isAdmin: false, isBuilder: false };
+  return { id: data.id, email: auth.user.email ?? '', fullName: data.full_name ?? '', role: data.role, coachId: data.coach_id, churchId: data.church_id, isAdmin: !!data.is_admin, isBuilder: !!data.is_builder };
 }
 
 /** Read everything the signed-in person is allowed to see. Row level security does the filtering. */

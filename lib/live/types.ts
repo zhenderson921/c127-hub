@@ -223,6 +223,29 @@ export interface Visit {
   visitType: string;
 }
 
+export const FEEDBACK_KINDS = ['Idea', 'Something is wrong', 'Question'] as const;
+export type FeedbackKind = (typeof FEEDBACK_KINDS)[number];
+export const FEEDBACK_STATUSES = ['New', 'In progress', 'Done', 'Not doing'] as const;
+export type FeedbackStatus = (typeof FEEDBACK_STATUSES)[number];
+
+/** Something a team member sent in from the Feedback button. */
+export interface Feedback {
+  id: string;
+  createdAt: string;
+  authorName: string;
+  authorEmail: string;
+  kind: FeedbackKind;
+  message: string;
+  /** The page they were on, and what it was showing. */
+  pagePath: string;
+  pageLabel: string;
+  screen: string;
+  status: FeedbackStatus;
+  builderNote: string;
+  resolvedAt: string;
+}
+export const isOutstanding = (f: Feedback): boolean => f.status === 'New' || f.status === 'In progress';
+
 export interface LiveData {
   staff: Staff[];
   churches: Church[];
@@ -238,12 +261,14 @@ export interface LiveData {
   responses: Response[];
   followUps: FollowUp[];
   visits: Visit[];
+  /** Only the builder is sent any of these. */
+  feedback: Feedback[];
   userNames: Record<string, string>;
   /** Data check items someone has looked at and left as they are, as "kind:key". */
   dismissed: string[];
 }
 
-export const EMPTY: LiveData = { staff: [], churches: [], people: [], roles: [], families: [], members: [], children: [], careCommunities: [], interactions: [], nextSteps: [], responses: [], followUps: [], visits: [], userNames: {}, dismissed: [] };
+export const EMPTY: LiveData = { staff: [], churches: [], people: [], roles: [], families: [], members: [], children: [], careCommunities: [], interactions: [], nextSteps: [], responses: [], followUps: [], visits: [], feedback: [], userNames: {}, dismissed: [] };
 
 /** Age and age band worked out from the year of birth, so they never go stale. */
 export function ageBand(birthYear: number | null, year = new Date().getFullYear()): { age: number | null; band: string } {

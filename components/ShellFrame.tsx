@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 
-export type NavGroup = { group: string; items: { href: string; label: string }[] };
+export type NavGroup = { group: string; items: { href: string; label: string; badge?: number }[] };
 
 /**
  * The frame both views share: logo, the Prototype / Live tool switch, navigation,
@@ -60,7 +60,10 @@ export function ShellFrame({
                   onClick={() => setOpen(false)}
                   className={`block rounded-md px-3 py-1.5 font-display text-lg tracking-wider ${active ? 'bg-brand text-white' : 'text-white/75 hover:bg-white/10 hover:text-white'}`}
                 >
-                  {it.label}
+                  <span className="flex items-center justify-between gap-2">
+                    {it.label}
+                    {!!it.badge && <span className="num rounded-full bg-warn px-2 font-sans text-xs font-bold leading-5 text-white" aria-label={`${it.badge} outstanding`}>{it.badge}</span>}
+                  </span>
                 </Link>
               );
             })}

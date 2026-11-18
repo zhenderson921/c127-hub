@@ -4,8 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadProfile, type Profile } from '../db';
 import { supabaseBrowser } from '../supabase';
-import { churchColumns, familyColumns, loadLive, personColumns, toFollowUp, toNextStep, toCareCommunity, toChild, toChurch, toFamily, toInteraction, toMember, toPerson, toRole, toStaff } from './db';
-import { EMPTY, type CareCommunity, type Child, type Church, type ChurchRole, type Family, type LiveData, type FollowUp, type MemberRelationship, type Method, type NextStep, type Person } from './types';
+import { churchColumns, familyColumns, loadLive, personColumns, toFeedback, toFollowUp, toNextStep, toCareCommunity, toChild, toChurch, toFamily, toInteraction, toMember, toPerson, toRole, toStaff } from './db';
+import { EMPTY, type CareCommunity, type Child, type Church, type ChurchRole, type Family, type LiveData, type Feedback, type FeedbackKind, type FollowUp, type MemberRelationship, type Method, type NextStep, type Person } from './types';
 
 export interface NewAdult {
   firstName: string;
@@ -84,6 +84,11 @@ interface LiveStore extends LiveData {
   updateNextStep: (key: string, patch: Partial<Pick<NextStep, 'action' | 'route' | 'ownerId' | 'active'>>) => Promise<boolean>;
   /** Add a staff member, so follow-ups can be given to them. */
   addStaff: (name: string, team: string) => Promise<boolean>;
+  // Feedback
+  /** Send feedback from wherever you are. Anyone on the team can. */
+  sendFeedback: (f: { kind: FeedbackKind; message: string; pagePath: string; pageLabel: string }) => Promise<boolean>;
+  /** Builder only: move a piece of feedback on, or note what was done. */
+  updateFeedback: (id: string, patch: Partial<Pick<Feedback, 'status' | 'builderNote'>>) => Promise<boolean>;
 }
 
 const Ctx = createContext<LiveStore | null>(null);
@@ -413,6 +418,38 @@ export function LiveProvider({ children }: { children: React.ReactNode }) {
         const row = await save('That person', (sb) => insert(sb, 'coaches', { name: name.trim(), team }));
         if (!row) return false;
         setData((d) => ({ ...d, staff: [...d.staff, toStaff(row)].sort((a, b) => a.name.localeCompare(b.name)) }));
+        return true;
+      },
+
+      sendFeedback: async (f) => {
+        const ok = await save('Your feedback', async (sb) => {
+          const { error: err } = await sb.from('feedback').insert({
+            kind: f.kind, message: f.message.trim(), page_path: f.pagePath, page_label: f.pageLabel,
+            screen: `${window.innerWidth} x ${window.innerHeight}`, author_name: profile?.fullName || null, author_email: profile?.email || null,
+          });
+          if (err) throw new Error(err.message);
+          // The builder sees it in their list straight away; nobody else can read the list.
+          if (!profile?.isBuilder) return [] as Feedback[];
+          const { data: rows, error: readErr } = await sb.from('feedback').select('*').order('created_at', { ascending: false });
+          if (readErr) throw new Error(readErr.message);
+          return (rows ?? []).map(toFeedback);
+        });
+        if (!ok) return false;
+        if (profile?.isBuilder) setData((d) => ({ ...d, feedback: ok }));
+        return true;
+      },
+
+      updateFeedback: async (id, patch) => {
+        const cols: Record<string, unknown> = {};
+        if (patch.status !== undefined) {
+          cols.status = patch.status;
+          cols.resolved_at = patch.status === 'Done' || patch.status === 'Not doing' ? new Date().toISOString() : null;
+        }
+        if (patch.builderNote !== undefined) cols.builder_note = orNull(patch.builderNote);
+        const row = await save('That change', (sb) => patchRow(sb, 'feedback', id, cols));
+        if (!row) return false;
+        const saved = toFeedback(row);
+        setData((d) => ({ ...d, feedback: d.feedback.map((x) => (x.id === id ? saved : x)) }));
         return true;
       },
 
