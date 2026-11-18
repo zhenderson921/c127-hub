@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { NavArrows } from '@/components/live/NavArrows';
 import { ShellFrame, type NavGroup } from '@/components/ShellFrame';
 import { useLive } from '@/lib/live/store';
 
@@ -23,12 +22,7 @@ export function LiveShell({ children }: { children: React.ReactNode }) {
   const { profile, ready, error, clearError, signOut } = useLive();
   const team = profile?.role === 'staff' || profile?.role === 'coach';
 
-  let body: React.ReactNode = (
-    <>
-      <NavArrows />
-      {children}
-    </>
-  );
+  let body: React.ReactNode = children;
   if (!ready) {
     body = <div className="py-24 text-center text-ink-soft">Loading the live tool…</div>;
   } else if (!team) {

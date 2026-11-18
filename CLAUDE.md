@@ -110,9 +110,9 @@ Next.js 15 (App Router), React 19, TypeScript, Tailwind 3, Supabase
   (Data check), account (change password). Each of people, families and
   churches is a list plus a full page per record (`[id]/page.tsx`). Every
   person, family and church named on any page is a link to its page
-  (`components/live/links.tsx`), and `components/live/NavArrows.tsx` gives
-  in-app back and forward arrows over the trail of pages visited. Lists keep
-  their search and filters across navigation (`lib/live/sticky.ts`).
+  (`components/live/links.tsx`). Moving between them uses the browser's own
+  back and forward buttons; Zane asked for in-app arrows to be removed. Lists
+  keep their search and filters across navigation (`lib/live/sticky.ts`).
 - `components/ShellFrame.tsx` – the frame both views share, with the view
   switch; `Shell.tsx` is the Prototype's nav, `LiveShell.tsx` the Live tool's
 - `components/live/ContactLog.tsx` – the contact log used on live screens
