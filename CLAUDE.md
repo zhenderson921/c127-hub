@@ -63,6 +63,12 @@ The app has two views, switched from the top of the sidebar:
   on C127's real records in Supabase. It needs a personal sign-in; the
   prototype password does not open it. Today it has Families and Churches.
 
+Someone with a personal sign-in always lands in the Live tool: `middleware.ts`
+sends them there from the front page and the sign-in page. They see the
+Prototype only after choosing it in the sidebar, which sets a one-hour
+`c127_view` cookie. Without this, a person signed in from before the Live tool
+existed opened the site and saw the old screens.
+
 New real-data work goes in the Live tool: add a screen under `app/live`, add it
 to the nav in `components/LiveShell.tsx`, and keep its types and saves in
 `lib/live/*`. Do not share types with the Prototype.

@@ -35,7 +35,7 @@ export function ShellFrame({
   const switcher = (
     <div className="mx-3 mt-3 grid grid-cols-2 rounded-md bg-white/10 p-0.5 text-center font-display text-base tracking-wider" role="group" aria-label="Which view">
       {/* Full page loads on purpose: the two views keep separate data. */}
-      <a href="/" aria-current={view === 'prototype' ? 'page' : undefined} className={`rounded px-2 py-1 ${view === 'prototype' ? 'bg-white text-ink' : 'text-white/70 hover:text-white'}`}>
+      <a href="/?view=prototype" aria-current={view === 'prototype' ? 'page' : undefined} className={`rounded px-2 py-1 ${view === 'prototype' ? 'bg-white text-ink' : 'text-white/70 hover:text-white'}`}>
         Prototype
       </a>
       <a href="/live" aria-current={view === 'live' ? 'page' : undefined} className={`rounded px-2 py-1 ${view === 'live' ? 'bg-brand text-white' : 'text-white/70 hover:text-white'}`}>
