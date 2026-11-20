@@ -116,6 +116,7 @@ declare
   restored integer := 0;
   reverted integer := 0;
   n integer;
+  last_id bigint;
 begin
   if not public.is_admin() then
     raise exception 'Only an admin can put a change back';
@@ -127,6 +128,8 @@ begin
     raise exception 'That change has already been put back';
   end if;
   perform set_config('c127.undoing', target::text, true);
+  -- Only what was in the batch when this started: the lines this function writes must not be read back as part of it.
+  select max(id) into last_id from public.change_log where batch = target;
 
   -- 1. Remove what the batch added, children first.
   for i in reverse array_length(ordered, 1)..1 loop
@@ -135,7 +138,7 @@ begin
       into pk
       from pg_index x join pg_attribute a on a.attrelid = x.indrelid and a.attnum = any (x.indkey)
       where x.indrelid = format('public.%I', t)::regclass and x.indisprimary;
-    for c in select new_row from public.change_log where batch = target and table_name = t and action = 'insert' order by id desc loop
+    for c in select new_row from public.change_log where batch = target and id <= last_id and table_name = t and action = 'insert' order by id desc loop
       execute format('delete from public.%I where %s', t, pk) using c.new_row;
       get diagnostics n = row_count;
       removed := removed + n;
@@ -144,7 +147,7 @@ begin
 
   -- 2. Restore what it removed, parents first. A row that is somehow back already is left alone.
   foreach t in array ordered loop
-    for c in select old_row from public.change_log where batch = target and table_name = t and action = 'delete' order by id loop
+    for c in select old_row from public.change_log where batch = target and id <= last_id and table_name = t and action = 'delete' order by id loop
       execute format('insert into public.%1$I select * from jsonb_populate_record(null::public.%1$I, $1) on conflict do nothing', t) using c.old_row;
       get diagnostics n = row_count;
       restored := restored + n;
@@ -159,7 +162,7 @@ begin
       into pk
       from pg_index x join pg_attribute a on a.attrelid = x.indrelid and a.attnum = any (x.indkey)
       where x.indrelid = format('public.%I', t)::regclass and x.indisprimary;
-    for c in select old_row, new_row from public.change_log where batch = target and table_name = t and action = 'update' order by id desc loop
+    for c in select old_row, new_row from public.change_log where batch = target and id <= last_id and table_name = t and action = 'update' order by id desc loop
       select string_agg(format('%1$I = (jsonb_populate_record(null::public.%2$I, $1)).%1$I', k.key, t), ', ')
         into sets
         from jsonb_each(c.old_row) k
