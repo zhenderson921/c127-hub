@@ -5,6 +5,7 @@ import { Board } from '@/components/live/Board';
 import { DateFilter, fitsAll, toMs, type DateConditions } from '@/components/live/DateFilter';
 import { ChurchSelect } from '@/components/live/fields';
 import { ChurchLink, PersonLink } from '@/components/live/links';
+import { PreviewTag, SendPreview } from '@/components/live/SendPreview';
 import { SortTh, ViewSwitch, sortRows, type SortState } from '@/components/live/sort';
 import { Badge, Drawer, PageHeader, Pager, Panel, Row } from '@/components/ui';
 import { draftFor } from '@/lib/live/followup';
@@ -231,8 +232,7 @@ function FollowUps({ items }: { items: Item[] }) {
   );
 }
 
-function CopyBox({ label, value, rows }: { label: string; value: string; rows: number }) {
-  const [text, setText] = useState(value);
+function CopyBox({ label, value, onChange, rows }: { label: string; value: string; onChange: (v: string) => void; rows: number }) {
   const [copied, setCopied] = useState(false);
   const id = `copy-${label.replace(/\W+/g, '-').toLowerCase()}`;
   return (
@@ -242,7 +242,7 @@ function CopyBox({ label, value, rows }: { label: string; value: string; rows: n
         <button
           className="text-xs font-semibold text-brand-dark underline"
           onClick={async () => {
-            await navigator.clipboard.writeText(text).catch(() => undefined);
+            await navigator.clipboard.writeText(value).catch(() => undefined);
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           }}
@@ -250,7 +250,7 @@ function CopyBox({ label, value, rows }: { label: string; value: string; rows: n
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      <textarea id={id} className="field" rows={rows} value={text} onChange={(e) => setText(e.target.value)} />
+      <textarea id={id} className="field" rows={rows} value={value} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }
@@ -269,6 +269,12 @@ function FollowUpDetail({ item }: { item: Item }) {
     church: church ? church.name : '',
     churchHasFam: !!church && SERVING_STATUSES.includes(church.status),
   });
+  // The wording starts as the draft and is theirs to change. Whatever it says when they log it is what gets saved.
+  const [subject, setSubject] = useState(draft.subject);
+  const [emailBody, setEmailBody] = useState(draft.email);
+  const [textBody, setTextBody] = useState(draft.text);
+  const [keepWords, setKeepWords] = useState(true);
+  const [previewing, setPreviewing] = useState(false);
   const email = person?.email || response?.email || '';
   const phone = person?.phone || response?.phone || '';
   const ticked = (response?.nextSteps ?? []).map((k) => nextSteps.find((n) => n.key === k)?.label ?? k);
@@ -277,7 +283,15 @@ function FollowUpDetail({ item }: { item: Item }) {
   async function reachedOut() {
     setBusy(true);
     // The contact goes on the guest's own record, and the follow-up moves on a stage.
-    const ok = f.personId ? await logContact({ personId: f.personId, method, reached: method !== 'Voicemail', summary: `Experience follow-up (${step?.track ?? f.title})${note.trim() ? `: ${note.trim()}` : ''}` }) : true;
+    const ok = f.personId
+      ? await logContact({
+          personId: f.personId, method, reached: method !== 'Voicemail',
+          summary: `Experience follow-up (${step?.track ?? f.title})${note.trim() ? `: ${note.trim()}` : ''}`,
+          // An email keeps its subject and message; a text keeps the text. Other kinds of contact have no message to keep.
+          subject: keepWords && method === 'Email' ? subject : '',
+          body: keepWords && method === 'Email' ? emailBody : keepWords && method === 'Text' ? textBody : '',
+        })
+      : true;
     if (ok) await updateFollowUp(f.id, { stage: f.stage === 'To do' ? 'Reached out' : f.stage });
     setBusy(false);
     if (ok) setNote('');
@@ -333,14 +347,52 @@ function FollowUpDetail({ item }: { item: Item }) {
 
       <div className="mt-6">
         <h3 className="text-sm font-bold">A message to send</h3>
-        <p className="mt-0.5 text-xs text-ink-soft">Change anything you like, copy it, and send it from your own email or phone. The hub does not send it for you.</p>
-        <CopyBox label="Email subject" value={draft.subject} rows={1} />
-        <CopyBox label="Email" value={draft.email} rows={9} />
-        <CopyBox label="Text message" value={draft.text} rows={3} />
+        <p className="mt-0.5 text-xs text-ink-soft">Change anything you like, then open it in your own email or phone to send. It goes from you, not from the hub.</p>
+        <CopyBox label="Email subject" value={subject} onChange={setSubject} rows={1} />
+        <CopyBox label="Email" value={emailBody} onChange={setEmailBody} rows={9} />
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <a
+            className={`btn-primary text-center ${email ? '' : 'pointer-events-none opacity-50'}`}
+            aria-disabled={!email}
+            href={email ? `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}` : undefined}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => setMethod('Email')}
+            title="Opens a new Gmail message with this already filled in"
+          >
+            Open in Gmail
+          </a>
+          <a
+            className={`btn-ghost text-center ${email ? '' : 'pointer-events-none opacity-50'}`}
+            aria-disabled={!email}
+            href={email ? `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}` : undefined}
+            onClick={() => setMethod('Email')}
+            title="Opens this computer's or phone's own mail app"
+          >
+            Open in my mail app
+          </a>
+        </div>
+        {!email && <p className="mt-1 text-xs text-ink-soft">No email address on this guest&rsquo;s record.</p>}
+        <button className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-warn px-3 py-2 text-sm font-semibold text-ink hover:bg-warn-light/50" aria-expanded={previewing} onClick={() => setPreviewing((v) => !v)}>
+          Send from the hub <PreviewTag />
+        </button>
+        {previewing && <SendPreview from={profile?.email ?? ''} to={email} toName={item.guest} subject={subject} body={emailBody} onClose={() => setPreviewing(false)} />}
+
+        <CopyBox label="Text message" value={textBody} onChange={setTextBody} rows={3} />
+        <a
+          className={`btn-ghost mt-2 block text-center ${phone ? '' : 'pointer-events-none opacity-50'}`}
+          aria-disabled={!phone}
+          href={phone ? `sms:${phone.replace(/[^\d+]/g, '')}?&body=${encodeURIComponent(textBody)}` : undefined}
+          onClick={() => setMethod('Text')}
+          title="On a phone, or a Mac with Messages, this opens a new text already filled in"
+        >
+          Open in Messages
+        </a>
+        {!phone && <p className="mt-1 text-xs text-ink-soft">No phone number on this guest&rsquo;s record.</p>}
       </div>
 
       <div className="mt-6 rounded-md border border-line bg-paper p-3">
-        <h3 className="text-sm font-bold">When you have reached out</h3>
+        <h3 className="text-sm font-bold">When you have sent it</h3>
         <div className="mt-2 grid grid-cols-2 gap-2">
           <div>
             <label htmlFor="fd-method" className="label">How</label>
@@ -353,6 +405,12 @@ function FollowUpDetail({ item }: { item: Item }) {
             <input id="fd-note" className="field" value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
         </div>
+        {(method === 'Email' || method === 'Text') && (
+          <label className="mt-2 flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={keepWords} onChange={(e) => setKeepWords(e.target.checked)} />
+            Save the {method === 'Email' ? 'email' : 'text'} above with it, so others can see what was said
+          </label>
+        )}
         <button className="btn-primary mt-2 w-full" disabled={busy} onClick={reachedOut}>{busy ? 'Saving…' : 'Log it and move this on'}</button>
         <p className="mt-1.5 text-xs text-ink-soft">This goes on the guest&rsquo;s contact log. Move the stage to &ldquo;Step taken&rdquo; when they have done what they said.</p>
       </div>

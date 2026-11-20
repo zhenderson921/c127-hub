@@ -33,6 +33,9 @@ export interface NewContact {
   method: Method;
   reached: boolean;
   summary: string;
+  /** The words that were sent, saved with the entry. */
+  subject?: string;
+  body?: string;
 }
 
 export interface NewResponse {
@@ -469,7 +472,7 @@ export function LiveProvider({ children }: { children: React.ReactNode }) {
       logContact: async (c) => {
         const row = await save('That contact', (sb) =>
           insert(sb, 'interactions', {
-            method: c.method, reached: c.reached, summary: orNull(c.summary), family_id: c.familyId ?? null, church_id: c.churchId ?? null, person_id: c.personId ?? null,
+            method: c.method, reached: c.reached, summary: orNull(c.summary), subject: orNull(c.subject ?? ''), body: orNull(c.body ?? ''), family_id: c.familyId ?? null, church_id: c.churchId ?? null, person_id: c.personId ?? null,
             staff_id: profile?.coachId ?? null, source: 'Hub',
           }),
         );

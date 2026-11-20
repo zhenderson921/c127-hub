@@ -20,6 +20,7 @@ export function ContactLog({ about, entries }: { about: { familyId?: string; chu
   const [summary, setSummary] = useState('');
   const [busy, setBusy] = useState(false);
   const [all, setAll] = useState(false);
+  const [shownMessage, setShownMessage] = useState<string | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -73,6 +74,19 @@ export function ContactLog({ about, entries }: { about: { familyId?: string; chu
                 {!i.reached && <Badge tone="warn">No answer yet</Badge>}
               </div>
               {i.summary && <p className="mt-0.5 whitespace-pre-wrap text-ink">{i.summary}</p>}
+              {i.body && (
+                <>
+                  <button className="mt-0.5 text-xs font-semibold text-brand-dark underline" aria-expanded={shownMessage === i.id} onClick={() => setShownMessage(shownMessage === i.id ? null : i.id)}>
+                    {shownMessage === i.id ? 'Hide what was sent' : 'Show what was sent'}
+                  </button>
+                  {shownMessage === i.id && (
+                    <div className="mt-1 rounded-md border border-line bg-paper p-2">
+                      {i.subject && <p className="font-semibold">{i.subject}</p>}
+                      <p className="whitespace-pre-wrap">{i.body}</p>
+                    </div>
+                  )}
+                </>
+              )}
               {(i.loggedByName || (i.loggedBy && userNames[i.loggedBy])) && <p className="mt-0.5 text-xs text-ink-soft">Logged by {i.loggedByName || userNames[i.loggedBy!]}</p>}
             </li>
           ))}

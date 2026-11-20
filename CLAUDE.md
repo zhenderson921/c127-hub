@@ -277,6 +277,23 @@ people fix things. Its tabs:
   goes, and a named owner. Staff can be added here so a follow-up can be given
   to them; that does not give them a sign-in.
 
+Sending is still done by the person, not the hub. A follow-up has "Open in
+Gmail", "Open in my mail app" and "Open in Messages" buttons that carry the
+wording into their own email or phone. When they log it, the subject and
+message are saved on the contact log entry (`interactions.subject`, `body`).
+
+**The send-from-the-hub preview is not real.** `components/live/SendPreview.tsx`
+and the "Email from the hub" panel on the account page show how connecting
+Gmail and sending would work. They send nothing, save nothing and connect to
+nothing; "connected" is a flag in that browser's own storage. Every surface
+is marked Preview. Rechaud Bell is C127's Google Workspace admin and DNS
+contact for the real build, which is laid out in
+`../communications-breakdown.md`: an Internal Google app in C127's Workspace,
+sending as each person through Gmail, and reading replies only on
+conversations the hub started. Zane also wants a way to add a Gmail
+conversation to the hub with one click later: a Gmail label first, possibly a
+Gmail add-on after.
+
 Follow-ups are made by the database, not the app: a trigger on
 `vce_responses` (`route_vce_response()`) makes one `tasks` row per kind of
 next step ticked. "Church coach" goes to the coach of the guest's church, or

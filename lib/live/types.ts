@@ -150,6 +150,9 @@ export interface Interaction {
   method: Method;
   reached: boolean;
   summary: string;
+  /** The email subject and the message itself, when an entry records something that was sent. */
+  subject: string;
+  body: string;
   familyId: string | null;
   personId: string | null;
   churchId: string | null;
