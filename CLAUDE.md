@@ -218,7 +218,10 @@ The script:
 - Reads `../C127 Historic Docs`: the "Churches" and "Current Advocates" tabs
   of the Church Spreadsheet and "Main Information" of the Family Spreadsheet.
   With `--only experience` (also part of a full run) it reads the "VISITS" tab
-  of `CCC_Visitors*.xlsx` and "Form Responses 1" of `My Next Steps*.xlsx`.
+  of `CCC_Visitors*.xlsx`, "Form Responses 1" of the Google form's
+  `My Next Steps*(Responses).xlsx`, and, when it is there, the HubSpot form's
+  export `My Next Steps*All Submissions.xlsx` (September 2026 onward). The same
+  email answering twice on one day is loaded once.
   Rows that only hold a place in a headcount are skipped. A visitor gets a
   person record only when there is an email; otherwise the name stays on the
   visit. An answer the sheet marks "Email Sent" comes in with no follow-up.

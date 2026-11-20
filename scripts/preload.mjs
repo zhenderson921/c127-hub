@@ -11,8 +11,9 @@
 //
 // It reads the "Churches" and "Current Advocates" tabs of "Church Spreadsheet*.xlsx"
 // and the "Main Information" tab of "Family Spreadsheet*.xlsx". For the Experience it
-// reads the "VISITS" tab of "CCC_Visitors*.xlsx" and "Form Responses 1" of
-// "My Next Steps*.xlsx"; each answer becomes follow-ups in the hub. Running it twice is
+// reads the "VISITS" tab of "CCC_Visitors*.xlsx", "Form Responses 1" of the Google
+// form's "My Next Steps*(Responses).xlsx", and the HubSpot form's export
+// "My Next Steps*All Submissions.xlsx"; each answer becomes follow-ups in the hub. Running it twice is
 // safe: churches, people and families that are already in the hub are skipped.
 //
 // Everything is loaded, including the parts that are not certain. A church name
@@ -214,6 +215,8 @@ class Hub {
     this.familyMembers = new Set(existing.family_members.map((m) => m.person_id));
     this.visitCodes = new Set(existing.visits.map((v) => v.visit_code));
     this.responseIds = new Set(existing.vce_responses.map((r) => r.external_id));
+    // The same person answering on the same day is one answer, whichever form it came through.
+    this.responseDays = new Set(existing.vce_responses.filter((r) => r.email && r.submitted_at).map((r) => `${r.email.toLowerCase()}|${r.submitted_at.slice(0, 10)}`));
     this.out = { coaches: [], churches: [], church_aliases: [], people: [], person_roles: [], advocate_onboarding: [], families: [], family_members: [], children: [], care_communities: [], visits: [], vce_responses: [] };
     this.unmatched = new Map(); // typed church name -> { name, where:Set, rows }
     this.loose = new Map(); // typed name -> church id, matched on the boiled-down name
@@ -661,6 +664,7 @@ function loadResponses(tab, hub, tally) {
       continue;
     }
     hub.responseIds.add(externalId);
+    if (mail) hub.responseDays.add(`${mail}|${stamp.toISOString().slice(0, 10)}`);
     const ticked = text(tab.getStarting(row, 'You heard that you have a part to play'));
     const steps = NEXT_STEPS.filter(([, phrase]) => ticked.toLowerCase().includes(phrase.toLowerCase())).map(([key]) => key);
     if (ticked && !steps.length) tally.add('answers whose next steps were not recognised');
@@ -680,6 +684,50 @@ function loadResponses(tab, hub, tally) {
     });
     tally.add('answers to add');
     tally.add(handled ? 'answers the spreadsheet marks as already followed up (no follow-up made)' : 'answers that will get follow-ups');
+    if (typedChurch && !churchId && !noChurch) tally.add('answers whose church is kept as typed, to confirm');
+  }
+}
+
+// The same form after it moved to HubSpot: one row per submission, with shorter headings.
+const HUBSPOT_COLUMNS = ['Submitted at - UTC', 'First name', 'Last name', 'Email', 'Phone number', 'Next steps selected', 'Participant type', 'Home church'];
+
+function loadHubspotResponses(tab, hub, tally) {
+  for (const row of tab.rows) {
+    const first = text(tab.get(row, 'First name'));
+    const last = text(tab.get(row, 'Last name'));
+    const mail = email(tab.get(row, 'Email'));
+    const stamp = new Date(text(tab.get(row, 'Submitted at - UTC')));
+    if (Number.isNaN(stamp.getTime()) || (!first && !mail)) continue;
+    const externalId = `hubspot:${stamp.toISOString()}:${mail ?? norm(`${first} ${last}`)}`;
+    const sameDay = mail ? `${mail}|${stamp.toISOString().slice(0, 10)}` : '';
+    if (hub.responseIds.has(externalId) || (sameDay && hub.responseDays.has(sameDay))) {
+      tally.add('answers already in the hub, or sent twice the same day (skipped)');
+      continue;
+    }
+    hub.responseIds.add(externalId);
+    if (sameDay) hub.responseDays.add(sameDay);
+    const ticked = text(tab.get(row, 'Next steps selected'));
+    const steps = NEXT_STEPS.filter(([, phrase]) => ticked.toLowerCase().includes(phrase.toLowerCase())).map(([key]) => key);
+    if (ticked && !steps.length) tally.add('answers whose next steps were not recognised');
+    const typedChurch = text(tab.get(row, 'Home church'));
+    const noChurch = NO_CHURCH.test(norm(typedChurch));
+    const churchId = hub.church(typedChurch);
+    if (typedChurch && !churchId && !noChurch) hub.noteUnmatched(typedChurch, 'guests');
+    const tel = phone(tab.get(row, 'Phone number'));
+    const known = first ? hub.findPerson(first, last, mail, null) : null;
+    const personId = first ? known ?? hub.addPerson({ first, last, email: mail, phone: tel, homeChurchId: churchId, homeChurchText: churchId || noChurch ? '' : typedChurch }) : null;
+    // "Other" with what they typed beside it reads better as one line.
+    const other = text(tab.get(row, 'Participant type - other'));
+    const describes = text(tab.get(row, 'Participant type')).split(/,\s+/).filter(Boolean).map((d) => (d === 'Other' && other ? `Other: ${other}` : d));
+    const likely = parseInt(text(tab.get(row, 'Likelihood to share')), 10);
+    hub.out.vce_responses.push({
+      id: randomUUID(), submitted_at: stamp.toISOString(), person_id: personId, first_name: first || null, last_name: last || null, email: mail, phone: tel,
+      home_church_text: churchId || noChurch ? null : typedChurch || null, church_id: churchId, wall_words: orNull(tab.get(row, 'Wall words')), feeling: orNull(tab.get(row, 'Feelings after closing video')),
+      heard_from: orNull(tab.get(row, 'How heard or came with')), next_steps: steps, describes,
+      comments: orNull(tab.get(row, 'Anything else to share')), likely_to_invite: likely >= 1 && likely <= 5 ? likely : null, needs_follow_up: true, source: 'HubSpot', external_id: externalId,
+    });
+    tally.add('answers to add');
+    tally.add(known ? 'guests already known (a visitor, parent, advocate or pastor)' : 'guests new to the hub');
     if (typedChurch && !churchId && !noChurch) tally.add('answers whose church is kept as typed, to confirm');
   }
 }
@@ -735,7 +783,7 @@ async function signInAndRead() {
     families: await fetchAll(sb, 'families', 'id, name, street, zip'),
     family_members: await fetchAll(sb, 'family_members', 'person_id'),
     visits: await fetchAll(sb, 'visits', 'visit_code'),
-    vce_responses: await fetchAll(sb, 'vce_responses', 'external_id'),
+    vce_responses: await fetchAll(sb, 'vce_responses', 'external_id, email, submitted_at'),
   };
   return { sb, existing };
 }
@@ -750,8 +798,10 @@ async function main() {
   if (wantChurchFile && !churchFile) throw new Error('No "Church Spreadsheet….xlsx" in that folder.');
   if (ONLY.includes('families') && !familyFile) throw new Error('No "Family Spreadsheet….xlsx" in that folder.');
   const visitorFile = findFile(/^ccc_visitors.*\.xlsx$/i);
-  const formFile = findFile(/^my next steps.*\.xlsx$/i);
-  if (ONLY.includes('experience') && (!visitorFile || !formFile)) throw new Error('The Experience load needs "CCC_Visitors….xlsx" and "My Next Steps….xlsx" in that folder.');
+  const formFile = findFile(/^my next steps.*responses.*\.xlsx$/i);
+  // The HubSpot export is optional: the form moved there in September 2026.
+  const hubspotFile = findFile(/^my next steps.*submissions.*\.xlsx$/i);
+  if (ONLY.includes('experience') && (!visitorFile || !formFile)) throw new Error('The Experience load needs "CCC_Visitors….xlsx" and "My Next Steps… (Responses).xlsx" in that folder.');
 
   const { sb, existing } = LOAD ? await signInAndRead() : { sb: null, existing: EMPTY };
   const hub = new Hub(existing);
@@ -762,6 +812,7 @@ async function main() {
   const familyTab = ONLY.includes('families') ? await readTab(familyFile, 'Main Information', FAMILY_COLUMNS) : null;
   const visitTab = ONLY.includes('experience') ? await readTab(visitorFile, 'VISITS', VISIT_COLUMNS) : null;
   const formTab = ONLY.includes('experience') ? await readTab(formFile, 'Form Responses 1', RESPONSE_COLUMNS) : null;
+  const hubspotTab = ONLY.includes('experience') && hubspotFile ? await readTab(hubspotFile, 'Sheet1', HUBSPOT_COLUMNS) : null;
 
   // Full coach names from both tabs, so a first name on one row can be read as the person named in full on another.
   const coachNames = [...existing.coaches.map((c) => c.name)];
@@ -785,6 +836,7 @@ async function main() {
   // Guests last, so someone who is already a parent, advocate or pastor is recognised and not added twice.
   section('Center visits', visitTab, (t) => loadVisits(visitTab, hub, t));
   section('Experience answers', formTab, (t) => loadResponses(formTab, hub, t));
+  section('Experience answers from HubSpot', hubspotTab, (t) => loadHubspotResponses(hubspotTab, hub, t));
 
   console.log(`\nChurch names: ${hub.loose.size} matched on a near-identical name, ${hub.unmatched.size} kept as typed for C127 to confirm on the Data check page.`);
 
